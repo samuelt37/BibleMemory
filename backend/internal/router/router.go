@@ -1,15 +1,14 @@
 package router
 
 import (
-	"net/http"
 	"github.com/go-chi/chi/v5"
-	"github.com/samuelt37/GoStarter/internal/handlers"
+	"github.com/samuelt37/BibleMemory/internal/handler"
 )
 
-func NewRouter() http.Handler {
+func NewRouter() *chi.Mux {
 	r := chi.NewRouter()
 
-	r.Get("/health", handlers.Health)
+	r.Get("/health", handler.Health)
 	
 	return r
 }

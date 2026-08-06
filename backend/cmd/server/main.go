@@ -5,8 +5,12 @@ import (
 	"net/http"
 	"os"
 	
-	"github.com/samuelt37/GoStarter/internal/router"
-	"github.com/samuelt37/GoStarter/internal/database"
+	"github.com/samuelt37/BibleMemory/internal/router"
+	"github.com/samuelt37/BibleMemory/internal/handler"
+	"github.com/samuelt37/BibleMemory/internal/service"
+	"github.com/samuelt37/BibleMemory/internal/repository"
+	"github.com/samuelt37/BibleMemory/internal/database"
+
 )
 
 func main() {
@@ -25,7 +29,12 @@ func main() {
 
 	fmt.Println("Database connected")
 
+	scriptureRepo := repository.NewScriptureRepository(db)
+    scriptureService := service.NewScriptureService(scriptureRepo)
+    scriptureHandler := handler.NewScriptureHandler(scriptureService)
+	
 	r := router.NewRouter()
+	router.RegisterScriptureRoutes(r, scriptureHandler)
 
 	fmt.Println("Server running on :"+port)
 

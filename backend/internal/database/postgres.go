@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -25,13 +26,16 @@ func Connect() (*sql.DB, error) {
 	)
 
 	db, err := sql.Open("postgres", connString)
-	if err != nil {
-		return nil, err
+
+	for i := 0; i < 10; i++ {
+	    err = db.Ping()
+	    if err == nil {
+	        return db, nil
+	    }
+
+	    fmt.Println("Waiting for database...")
+	    time.Sleep(time.Second)
 	}
 
-	if err := db.Ping(); err != nil {
-		return nil, err
-	}
-
-	return db, nil
+	return nil, err
 }
