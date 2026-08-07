@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/samuelt37/BibleMemory/internal/service"
+	"github.com/samuelt37/BibleMemory/internal/dto"
 )
 
 type ScriptureHandler struct {
@@ -19,16 +20,22 @@ func NewScriptureHandler(
 	}
 }
 
-func (h *ScriptureHandler) GetBook(
+func (h *ScriptureHandler) GetScripture(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
 	// later get params here
-
-	verses, err := h.service.GetBook(
-		"KJV",
-		"Genesis",
-	)
+	chapter := 1
+	verseStart := 5
+	verseEnd := 10
+	query := dto.ScriptureQuery{
+ 		Translation: "KJV",
+	    Book:        "Genesis",
+		Chapter: 	 &chapter,
+		VerseStart:  &verseStart,
+		VerseEnd: 	 &verseEnd,
+	}
+	verses, err := h.service.GetScripture(query)
 
 	if err != nil {
 		http.Error(

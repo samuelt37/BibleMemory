@@ -3,6 +3,7 @@ package service
 import (
 	"github.com/samuelt37/BibleMemory/internal/model"
 	"github.com/samuelt37/BibleMemory/internal/repository"
+	"github.com/samuelt37/BibleMemory/internal/dto"
 )
 
 type ScriptureService struct {
@@ -18,13 +19,11 @@ func NewScriptureService(
 	}
 }
 
-func (s *ScriptureService) GetBook(
-	translation string,
-	book string,
+func (s *ScriptureService) GetScripture(
+	query dto.ScriptureQuery,
 ) ([]model.Verse, error) {
-
-	return s.repo.GetBook(
-		translation,
-		book,
-	)
+	if query.VerseStart != nil && query.VerseEnd == nil {
+		query.VerseEnd = nil
+	}
+	return s.repo.GetScripture(query)
 }

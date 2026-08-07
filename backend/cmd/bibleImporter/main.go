@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/samuelt37/BibleMemory/internal/database"
-	"github.com/samuelt37/BibleMemory/internal/models"
+	"github.com/samuelt37/BibleMemory/internal/importer"
 )
 
 func main() {
@@ -44,7 +44,7 @@ func main() {
     		panic(err)
 		}
 
-		var book models.Book
+		var book importer.Book
 		
 		err = json.Unmarshal(data, &book)
 		if err != nil {

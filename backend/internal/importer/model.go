@@ -1,4 +1,4 @@
-package model
+package importer
 
 type Book struct {
     Book     string    `json:"book"`
