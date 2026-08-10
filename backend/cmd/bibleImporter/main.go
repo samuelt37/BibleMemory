@@ -21,6 +21,23 @@ func main() {
 
 	fmt.Println("Database connected")
 
+	//get list of books for order
+	data, err := os.ReadFile("data/kjv/Books.json")
+	if err != nil {
+		panic(err)
+	}
+	var bookList []string
+	err = json.Unmarshal(data, &bookList)
+	if err != nil {
+		panic(err)
+	}
+	bookOrder := make(map[string]int)
+	for i, book := range bookList {
+		bookOrder[book] = i
+	}
+
+
+	//loop through and get all the data per book
  	files, err := os.ReadDir("data/kjv")
 	if err != nil {
 		panic(err)
@@ -45,7 +62,6 @@ func main() {
 		}
 
 		var book importer.Book
-		
 		err = json.Unmarshal(data, &book)
 		if err != nil {
 			panic(err)
@@ -63,14 +79,22 @@ func main() {
 					panic(err)
 				}
 
+				bookNum := bookOrder[book.Book]
+				testament := "Old"
+				if bookOrder[book.Book] >= 39 {
+					testament = "New"
+				}
+
 				_, err = db.Exec(
    					`
     				INSERT INTO bible_verses 
-   					(translation, book, chapter, verse, text)
-    				VALUES ($1, $2, $3, $4, $5)
+   					(translation, testament, book_order, book, chapter, verse, text)
+    				VALUES ($1, $2, $3, $4, $5, $6, $7)
     				ON CONFLICT (translation, book, chapter, verse) DO NOTHING
     				`,
     				"KJV",
+					testament,
+					bookNum,
     				book.Book,
     				chapterNum,
     				verseNum,

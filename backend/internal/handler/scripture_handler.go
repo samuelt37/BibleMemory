@@ -2,10 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
-	"github.com/samuelt37/BibleMemory/internal/service"
 	"github.com/samuelt37/BibleMemory/internal/dto"
+	"github.com/samuelt37/BibleMemory/internal/service"
 )
 
 type ScriptureHandler struct {
@@ -24,16 +25,27 @@ func (h *ScriptureHandler) GetScripture(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
+	fmt.Println("handler before service")
 	// later get params here
-	chapter := 1
-	verseStart := 5
-	verseEnd := 10
+	chapter := 3
+	verse := 5
+
 	query := dto.ScriptureQuery{
- 		Translation: "KJV",
-	    Book:        "Genesis",
-		Chapter: 	 &chapter,
-		VerseStart:  &verseStart,
-		VerseEnd: 	 &verseEnd,
+		Translation: "KJV",
+		Ranges: []dto.ScriptureRange{
+			{
+				Start: dto.Reference{
+					Book:    1,
+					Chapter: &chapter,
+					Verse:   &verse,
+				},
+				// End: &dto.Reference{
+				// 	Book:    1,
+				// 	Chapter: 1,
+				// 	Verse:   5,
+				// },
+			},
+		},
 	}
 	verses, err := h.service.GetScripture(query)
 

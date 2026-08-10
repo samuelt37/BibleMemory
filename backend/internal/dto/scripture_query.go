@@ -1,10 +1,17 @@
 package dto
 
 type ScriptureQuery struct {
-    Translation string
-    Book        string
-    Chapter     *int
-    Verse       *int
-    VerseStart  *int
-    VerseEnd    *int
+	Translation string
+	Ranges      []ScriptureRange
+}
+
+type ScriptureRange struct {
+	Start Reference
+	End   *Reference
+}
+
+type Reference struct {
+	Book    int
+	Chapter *int
+	Verse   *int
 }
