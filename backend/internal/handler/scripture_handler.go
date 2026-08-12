@@ -2,9 +2,9 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/samuelt37/BibleMemory/internal/dto"
 	"github.com/samuelt37/BibleMemory/internal/service"
 )
@@ -21,40 +21,48 @@ func NewScriptureHandler(
 	}
 }
 
+func (h *ScriptureHandler) GetBooks(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	books, err := h.service.GetBooks()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	json.NewEncoder(w).Encode(books)
+}
+
+func (h *ScriptureHandler) GetChapters(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	book := chi.URLParam(r, "book")
+	chapters, err := h.service.GetChapters(book)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	json.NewEncoder(w).Encode(chapters)
+}
+
 func (h *ScriptureHandler) GetScripture(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	fmt.Println("handler before service")
-	// later get params here
-	chapter := 3
-	verse := 5
+	var query dto.ScriptureQuery
 
-	query := dto.ScriptureQuery{
-		Translation: "KJV",
-		Ranges: []dto.ScriptureRange{
-			{
-				Start: dto.Reference{
-					Book:    1,
-					Chapter: &chapter,
-					Verse:   &verse,
-				},
-				// End: &dto.Reference{
-				// 	Book:    1,
-				// 	Chapter: 1,
-				// 	Verse:   5,
-				// },
-			},
-		},
-	}
-	verses, err := h.service.GetScripture(query)
-
+	err := json.NewDecoder(r.Body).Decode(&query)
 	if err != nil {
-		http.Error(
-			w,
-			err.Error(),
-			http.StatusInternalServerError,
-		)
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	verses, err := h.service.GetScripture(query)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

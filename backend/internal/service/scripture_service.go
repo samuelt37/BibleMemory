@@ -22,6 +22,16 @@ func NewScriptureService(
 	}
 }
 
+func (s *ScriptureService) GetBooks() ([]string, error) {
+	return s.repo.GetBooks()
+}
+
+func (s *ScriptureService) GetChapters(
+	book string,
+) (int, error) {
+	return s.repo.GetChapters(book)
+}
+
 func (s *ScriptureService) GetScripture(
 	query dto.ScriptureQuery,
 ) ([]model.Verse, error) {

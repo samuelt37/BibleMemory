@@ -10,7 +10,17 @@ func RegisterScriptureRoutes(
 	scriptureHandler *handler.ScriptureHandler,
 ) {
 	r.Get(
-		"/scripture/{translation}/{book}",
+		"/books",
+		scriptureHandler.GetBooks,
+	)
+
+	r.Get(
+		"/{book}/chapters",
+		scriptureHandler.GetChapters,
+	)
+
+	r.Post(
+		"/scripture",
 		scriptureHandler.GetScripture,
 	)
 }

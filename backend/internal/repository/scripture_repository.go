@@ -19,6 +19,58 @@ func NewScriptureRepository(db *sql.DB) *ScriptureRepository {
 	}
 }
 
+func (r *ScriptureRepository) GetBooks() ([]string, error) {
+	query := `
+		SELECT book
+		FROM bible_verses
+		WHERE translation = 'KJV'
+		GROUP BY book
+		ORDER BY MIN(book_order)
+	`
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	var books []string
+
+	for rows.Next() {
+		var book string
+
+		if err := rows.Scan(&book); err != nil {
+			return nil, err
+		}
+
+		books = append(books, book)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return books, nil
+}
+
+func (r *ScriptureRepository) GetChapters(
+	book string,
+) (int, error) {
+	query := `
+		SELECT COUNT(DISTINCT chapter)
+		FROM bible_verses
+		WHERE translation = 'KJV'
+		AND book = $1
+	`
+	var count int
+
+	err := r.db.QueryRow(query, book).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
 func (r *ScriptureRepository) GetScripture(
 	queryParams dto.ScriptureQuery,
 ) ([]model.Verse, error) {
@@ -47,7 +99,7 @@ func (r *ScriptureRepository) GetScripture(
 		)
 		ORDER BY book_order, chapter, verse
 	`
-	fmt.Println(query)
+
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		return nil, err
