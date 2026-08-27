@@ -30,11 +30,15 @@ func main() {
 	fmt.Println("Database connected")
 
 	scriptureRepo := repository.NewScriptureRepository(db)
-    scriptureService := service.NewScriptureService(scriptureRepo)
-    scriptureHandler := handler.NewScriptureHandler(scriptureService)
+	scriptureService := service.NewScriptureService(scriptureRepo)
+	scriptureHandler := handler.NewScriptureHandler(scriptureService)
+
+	summaryService := service.NewSummaryService(scriptureRepo)
+	summaryHandler := handler.NewSummaryHandler(summaryService)
 	
 	r := router.NewRouter()
 	router.RegisterScriptureRoutes(r, scriptureHandler)
+	router.RegisterSummaryRoutes(r, summaryHandler)
 
 	fmt.Println("Server running on :"+port)
 

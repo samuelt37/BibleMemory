@@ -15,7 +15,7 @@ func RegisterScriptureRoutes(
 	)
 
 	r.Get(
-		"/{book}/chapters",
+		"/books/{book}/chapters",
 		scriptureHandler.GetChapters,
 	)
 

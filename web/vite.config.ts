@@ -14,6 +14,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/books": "http://localhost:8080",
+      "/check": "http://localhost:8080",
     },
   },
 });
