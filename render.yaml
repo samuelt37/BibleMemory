@@ -1,0 +1,50 @@
+databases:
+  - name: bible-db
+    databaseName: bible_memory
+    user: bible_user
+    plan: free
+
+services:
+  # 1. Backend Web Service (Go + Docker)
+  - type: web
+    name: bible-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: bible-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: bible-db
+          property: port
+      - key: DB_USER
+        fromDatabase:
+          name: bible-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: bible-db
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: bible-db
+          property: database
+      - key: PORT
+        value: 8080
+
+  # 2. Frontend Static Site (React + Vite)
+  - type: web
+    name: bible-web
+    runtime: static
+    rootDir: web
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
