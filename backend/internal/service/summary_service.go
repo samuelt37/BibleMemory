@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/samuelt37/BibleMemory/internal/dto"
@@ -101,7 +102,7 @@ func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryRe
 		return dto.SummaryResult{}, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", "YOUR_API_KEY_HERE") // Replace with your actual API key or use a secure method to inject it.
+	httpReq.Header.Set("x-goog-api-key", os.Getenv("API_KEY"))
 
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
