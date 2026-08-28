@@ -5,6 +5,7 @@ import { MemoryCard } from "../components/MemoryCard.tsx";
 import { useChapters } from "@/hooks/Books.ts";
 import { Button } from "@/components/ui/button";
 import { useBooks } from "@/hooks/Books.ts";
+import { API_URL } from "@/constants/config";
 
 export function MemoryPage() {
   const { bookName } = useParams();
@@ -42,7 +43,7 @@ export function MemoryPage() {
 
   const answersList = chapterNumbers.map((chapterNum) => answers[chapterNum] ?? "");
 
-  const res = await fetch("/check", {
+  const res = await fetch(`${API_URL}/check`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

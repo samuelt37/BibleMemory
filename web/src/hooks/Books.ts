@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
+import { API_URL } from "@/constants/config";
 
 async function fetchBooks(): Promise<string[]> {
-  const res = await fetch("/books");
+  const res = await fetch(`${API_URL}/books`);
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   return res.json();
 }
 
 async function fetchChapters(bookName: string): Promise<number> {
-  const res = await fetch(`/books/${bookName}/chapters`);
+  const res = await fetch(`${API_URL}/books/${bookName}/chapters`);
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   return res.json();
 }
