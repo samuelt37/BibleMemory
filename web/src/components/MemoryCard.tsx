@@ -14,7 +14,7 @@ export function MemoryCard({ sectionTitle, value, onChange, result }: MemoryCard
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Type the verse from memory…"
+        placeholder="Summarize the chapter in your own words..."
         rows={4}
         className="mt-2 w-full resize-none rounded-md border p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
       />

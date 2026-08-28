@@ -101,8 +101,16 @@ func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryRe
 	if err != nil {
 		return dto.SummaryResult{}, err
 	}
+	apiKey := os.Getenv("API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("GEMINI_API_KEY")
+	}
+	if apiKey == "" {
+		return dto.SummaryResult{}, fmt.Errorf("API_KEY environment variable is not set on the server")
+	}
+
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", os.Getenv("API_KEY"))
+	httpReq.Header.Set("x-goog-api-key", apiKey)
 
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
@@ -111,7 +119,9 @@ func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryRe
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return dto.SummaryResult{}, fmt.Errorf("Gemini API returned status %d", resp.StatusCode)
+		var errBody bytes.Buffer
+		errBody.ReadFrom(resp.Body)
+		return dto.SummaryResult{}, fmt.Errorf("Gemini API returned status %d: %s", resp.StatusCode, errBody.String())
 	}
 
 	var apiResp struct {
