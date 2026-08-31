@@ -13,7 +13,7 @@ function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<MemoryPage />} />
-            <Route path="/book/:bookName" element={<MemoryPage />} />
+            {/* <Route path="/book/:bookName" element={<MemoryPage />} /> */}
           </Route>
         </Routes>
       </BrowserRouter>
