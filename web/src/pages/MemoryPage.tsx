@@ -1,110 +1,123 @@
 // pages/MemoryPage.tsx
-import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useState } from "react";
 import { MemoryCard } from "../components/MemoryCard.tsx";
-import { useChapters } from "@/hooks/Books.ts";
-import { Button } from "@/components/ui/button";
+import { RangeCard } from "../components/RangeCard.tsx";
 import { useBooks } from "@/hooks/Books.ts";
+import { Button } from "@/components/ui/button";
 import { API_URL } from "@/constants/config";
+import type { BookRange } from "@/models/BookRange";
+
+type ChapterEntry = { book: string; chapter: number };
+type ChapterResult = { accuracy: number; feedback: string };
 
 export function MemoryPage() {
-  const { bookName } = useParams();
-  const { data: books = [] } = useBooks(); 
-  const { data: totalChapters = 0, isLoading, error } = useChapters(bookName);
+  const { data: books = [] } = useBooks();
+  // const { data: chapterCounts = {} } = useBookChapterCounts();
+  const chapterCounts: Record<string, number> = Object.fromEntries(
+    books.map((b) => [b, 10])
+  );
 
-  const [startChapter, setStartChapter] = useState(1);
-  const [endChapter, setEndChapter] = useState(1);
-  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [ranges, setRanges] = useState<BookRange[]>(() =>
+    books.length
+      ? [{ id: 1, book: books[0], from: 1, to: chapterCounts[books[0]] ?? 1 }]
+      : []
+  );
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [results, setResults] = useState<Record<string, ChapterResult>>({});
 
-  const [results, setResults] = useState<Record<number, { accuracy: number; feedback: string }>>({});
+  const updateRange = (id: number, patch: Partial<BookRange>) =>
+    setRanges((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
-  useEffect(() => {
-    setStartChapter(1);
-    setEndChapter(totalChapters);
-    setAnswers({});
-  }, [bookName, totalChapters]);
+  const removeRange = (id: number) =>
+    setRanges((prev) => prev.filter((r) => r.id !== id));
 
-  const effectiveEnd = Math.min(endChapter || totalChapters, totalChapters);
+  const addRange = () => {
+    const nextId = ranges.length ? Math.max(...ranges.map((r) => r.id)) + 1 : 1;
+    const defaultBook = ranges[ranges.length - 1]?.book ?? books[0];
+    setRanges((prev) => [
+      ...prev,
+      { id: nextId, book: defaultBook, from: 1, to: 1 },
+    ]);
+  };
 
-  if (isLoading) return <p className="p-6">Loading…</p>;
-  if (error) return <p className="p-6 text-destructive">Couldn't load chapters</p>;
+  const key = (e: ChapterEntry) => `${e.book}-${e.chapter}`;
 
-  const chapterNumbers = Array.from(
-    { length: Math.max(effectiveEnd - startChapter + 1, 0) },
-    (_, i) => startChapter + i
+  // Flatten all ranges into individual chapter entries, deduping overlaps
+  const chapterEntries: ChapterEntry[] = Array.from(
+    new Map(
+      ranges.flatMap((r) =>
+        Array.from({ length: Math.max(r.to - r.from + 1, 0) }, (_, i) => {
+          const entry = { book: r.book, chapter: r.from + i };
+          return [key(entry), entry] as const;
+        })
+      )
+    ).values()
   );
 
   async function handleCheckAll() {
-  const bookIndex = books.indexOf(bookName!);
-  const ranges = chapterNumbers.map((chapterNum) => ({
-    start: { book: bookIndex, chapter: chapterNum, verse: null },
-    end: { book: bookIndex, chapter: chapterNum, verse: null },
-  }));
+    const scriptureRanges = chapterEntries.map((e) => {
+      const bookIndex = books.indexOf(e.book);
+      return {
+        start: { book: bookIndex, chapter: e.chapter, verse: null },
+        end: { book: bookIndex, chapter: e.chapter, verse: null },
+      };
+    });
 
-  const answersList = chapterNumbers.map((chapterNum) => answers[chapterNum] ?? "");
+    const answersList = chapterEntries.map((e) => answers[key(e)] ?? "");
 
-  const res = await fetch(`${API_URL}/check`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      scripture: { translation: "KJV", ranges },
-      answers: answersList,
-    }),
-  });
+    const res = await fetch(`${API_URL}/check`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scripture: { translation: "KJV", ranges: scriptureRanges },
+        answers: answersList,
+      }),
+    });
 
-  if (!res.ok) {
-    console.error("Check failed:", res.status);
-    return;
+    if (!res.ok) {
+      console.error("Check failed:", res.status);
+      return;
+    }
+
+    const resultsList: ChapterResult[] = await res.json();
+
+    const resultsByChapter: Record<string, ChapterResult> = {};
+    chapterEntries.forEach((e, i) => {
+      resultsByChapter[key(e)] = resultsList[i];
+    });
+
+    setResults(resultsByChapter);
   }
-
-  const results: { accuracy: number; feedback: string }[] = await res.json();
-
-  // results[i] corresponds to chapterNumbers[i] — zip them back together
-  const resultsByChapter: Record<number, { accuracy: number; feedback: string }> = {};
-  chapterNumbers.forEach((chapterNum, i) => {
-    resultsByChapter[chapterNum] = results[i];
-  });
-
-  setResults(resultsByChapter);
-}
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
-        <div className="flex items-center gap-2 text-sm">
-          <label className="flex items-center gap-1">
-            From
-            <input
-              type="number"
-              min={1}
-              max={totalChapters}
-              value={startChapter}
-              onChange={(e) => setStartChapter(Number(e.target.value))}
-              className="w-16 rounded border px-2 py-1"
+        <div className="flex flex-col gap-3">
+          {ranges.map((r) => (
+            <RangeCard
+              key={r.id}
+              range={r}
+              books={books}
+              chapterCounts={chapterCounts}
+              onUpdate={updateRange}
+              onRemove={removeRange}
             />
-          </label>
-          <label className="flex items-center gap-1">
-            To
-            <input
-              type="number"
-              min={1}
-              max={totalChapters}
-              value={endChapter || totalChapters}
-              onChange={(e) => setEndChapter(Number(e.target.value))}
-              className="w-16 rounded border px-2 py-1"
-            />
-          </label>
-          <span className="text-muted-foreground">of {totalChapters} chapters</span>
+          ))}
+          <Button variant="outline" onClick={addRange}>
+            + Add range
+          </Button>
         </div>
 
         <div className="flex flex-col gap-4">
-          {chapterNumbers.map((chapterNum) => (
+          {chapterEntries.map((e) => (
             <MemoryCard
-              key={chapterNum}
-              sectionTitle={`Chapter ${chapterNum}`}
-              value={answers[chapterNum] ?? ""}
-              onChange={(value) => setAnswers((prev) => ({ ...prev, [chapterNum]: value }))}
-              result={results[chapterNum]}
+              key={key(e)}
+              sectionTitle={`${e.book} — Chapter ${e.chapter}`}
+              value={answers[key(e)] ?? ""}
+              onChange={(value) =>
+                setAnswers((prev) => ({ ...prev, [key(e)]: value }))
+              }
+              result={results[key(e)]}
             />
           ))}
         </div>
