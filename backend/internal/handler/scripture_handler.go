@@ -31,6 +31,7 @@ func (h *ScriptureHandler) GetBooks(
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(books)
 }
 
@@ -45,6 +46,7 @@ func (h *ScriptureHandler) GetChapters(
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(chapters)
 }
 
@@ -66,5 +68,6 @@ func (h *ScriptureHandler) GetScripture(
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(verses)
 }

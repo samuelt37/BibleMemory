@@ -1,4 +1,5 @@
-export type Book = {
+export type BookInfo = {
   id: number;
-  name: string;
+  book: string;
+  chapters: number;
 };

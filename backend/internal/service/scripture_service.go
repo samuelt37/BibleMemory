@@ -22,7 +22,7 @@ func NewScriptureService(
 	}
 }
 
-func (s *ScriptureService) GetBooks() ([]string, error) {
+func (s *ScriptureService) GetBooks() ([]model.BookInfo, error) {
 	return s.repo.GetBooks()
 }
 
@@ -34,7 +34,7 @@ func (s *ScriptureService) GetChapters(
 
 func (s *ScriptureService) GetScripture(
 	query dto.ScriptureQuery,
-) ([]model.Verse, error) {
+) ([]model.VerseInfo, error) {
 	if len(query.Ranges) == 0 {
 		return nil, errors.New("Must have at least a book")
 	}

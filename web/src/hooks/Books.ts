@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { API_URL } from "@/constants/config";
+import type { BookInfo } from "@/models/Book";
 
-async function fetchBooks(): Promise<string[]> {
+async function fetchBooks(): Promise<BookInfo[]> {
   const res = await fetch(`${API_URL}/books`);
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   return res.json();
@@ -14,10 +15,13 @@ async function fetchChapters(bookName: string): Promise<number> {
 }
 
 export function useBooks() {
-  return useQuery({
+  return useQuery<BookInfo[]>({
     queryKey: ["books"],
-    queryFn: fetchBooks,
-    staleTime: Infinity, // book list never changes — never auto-refetch
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/books`);
+      if (!res.ok) throw new Error("Failed to fetch books");
+      return res.json();
+    },
   });
 }
 

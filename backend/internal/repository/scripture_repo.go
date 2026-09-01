@@ -19,9 +19,9 @@ func NewScriptureRepository(db *sql.DB) *ScriptureRepository {
 	}
 }
 
-func (r *ScriptureRepository) GetBooks() ([]string, error) {
+func (r *ScriptureRepository) GetBooks() ([]model.BookInfo, error) {
 	query := `
-		SELECT book
+		SELECT MIN(book_order) AS id, book, MAX(chapter) AS chapters
 		FROM bible_verses
 		WHERE translation = 'KJV'
 		GROUP BY book
@@ -31,19 +31,18 @@ func (r *ScriptureRepository) GetBooks() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	defer rows.Close()
 
-	var books []string
+	var books []model.BookInfo
 
 	for rows.Next() {
-		var book string
+		var b model.BookInfo
 
-		if err := rows.Scan(&book); err != nil {
+		if err := rows.Scan(&b.ID, &b.Book, &b.Chapters); err != nil {
 			return nil, err
 		}
 
-		books = append(books, book)
+		books = append(books, b)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -73,7 +72,7 @@ func (r *ScriptureRepository) GetChapters(
 
 func (r *ScriptureRepository) GetScripture(
 	queryParams dto.ScriptureQuery,
-) ([]model.Verse, error) {
+) ([]model.VerseInfo, error) {
 
 	query := `
 		SELECT book, chapter, verse, text
@@ -107,10 +106,10 @@ func (r *ScriptureRepository) GetScripture(
 
 	defer rows.Close()
 
-	var verses []model.Verse
+	var verses []model.VerseInfo
 
 	for rows.Next() {
-		var verse model.Verse
+		var verse model.VerseInfo
 
 		err := rows.Scan(
 			&verse.Book,

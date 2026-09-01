@@ -6,22 +6,18 @@ import { useBooks } from "@/hooks/Books.ts";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/constants/config";
 import type { BookRange } from "@/models/BookRange";
+import type { BookInfo } from "@/models/Book.ts";
 
 type ChapterEntry = { book: string; chapter: number };
 type ChapterResult = { accuracy: number; feedback: string };
 
 export function MemoryPage() {
   const { data: books = [] } = useBooks();
-  // const { data: chapterCounts = {} } = useBookChapterCounts();
   const chapterCounts: Record<string, number> = Object.fromEntries(
-    books.map((b) => [b, 10])
+    books.map((b) => [b.book, b.chapters])
   );
 
-  const [ranges, setRanges] = useState<BookRange[]>(() =>
-    books.length
-      ? [{ id: 1, book: books[0], from: 1, to: chapterCounts[books[0]] ?? 1 }]
-      : []
-  );
+  const [ranges, setRanges] = useState<BookRange[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, ChapterResult>>({});
 
@@ -31,14 +27,13 @@ export function MemoryPage() {
   const removeRange = (id: number) =>
     setRanges((prev) => prev.filter((r) => r.id !== id));
 
-  const addRange = () => {
-    const nextId = ranges.length ? Math.max(...ranges.map((r) => r.id)) + 1 : 1;
-    const defaultBook = ranges[ranges.length - 1]?.book ?? books[0];
-    setRanges((prev) => [
-      ...prev,
-      { id: nextId, book: defaultBook, from: 1, to: 1 },
-    ]);
-  };
+const addRange = (book: BookInfo) => {
+  const nextId = ranges.length ? Math.max(...ranges.map((r) => r.id)) + 1 : 1;
+  setRanges((prev) => [
+    ...prev,
+    { id: nextId, book: book.book, bookId: book.id, from: 1, to: book.chapters },
+  ]);
+};
 
   const key = (e: ChapterEntry) => `${e.book}-${e.chapter}`;
 
@@ -56,7 +51,7 @@ export function MemoryPage() {
 
   async function handleCheckAll() {
     const scriptureRanges = chapterEntries.map((e) => {
-      const bookIndex = books.indexOf(e.book);
+      const bookIndex = books.findIndex((b) => b.book === e.book);
       return {
         start: { book: bookIndex, chapter: e.chapter, verse: null },
         end: { book: bookIndex, chapter: e.chapter, verse: null },
@@ -92,20 +87,36 @@ export function MemoryPage() {
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-row gap-3 items-start">
           {ranges.map((r) => (
             <RangeCard
-              key={r.id}
               range={r}
               books={books}
-              chapterCounts={chapterCounts}
               onUpdate={updateRange}
               onRemove={removeRange}
             />
           ))}
-          <Button variant="outline" onClick={addRange}>
-            + Add range
-          </Button>
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) {
+                const book = books.find((b) => b.book === e.target.value);
+                if (book) {
+                  addRange(book);
+                }
+              }
+            }}
+            disabled={books.length === 0}
+            className="appearance-none [&::-ms-expand]:hidden h-10 rounded-lg border border-border px-4 text-sm text-muted-foreground bg-transparent focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer">
+            <option value="" disabled>
+              + Add range
+            </option>
+            {books.map((b) => (
+              <option key={b.book} value={b.book}>
+                {b.book}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="flex flex-col gap-4">

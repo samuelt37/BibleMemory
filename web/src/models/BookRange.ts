@@ -1,6 +1,7 @@
 export type BookRange = { 
     id: number; 
-    book: string; 
+    book: string;
+    bookId: number; 
     from: number; 
     to: number 
 };

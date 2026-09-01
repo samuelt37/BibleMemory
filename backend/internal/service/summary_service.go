@@ -54,7 +54,7 @@ func (s *SummaryService) CheckSummary(req dto.SummaryRequest) ([]dto.SummaryResu
 	return results, nil
 }
 
-func concatVerses(verses []model.Verse) string {
+func concatVerses(verses []model.VerseInfo) string {
 	var sb strings.Builder
 	for i, v := range verses {
 		if i > 0 {

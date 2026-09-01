@@ -1,6 +1,6 @@
 package model
 
-type Verse struct {
+type VerseInfo struct {
 	Book      string `json:"book"`
 	Chapter   int    `json:"chapter"`
 	Verse     int    `json:"verse"`
