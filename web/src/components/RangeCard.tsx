@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import type { BookRange } from "@/models/BookRange";
-import type { BookInfo } from "@/models/Book";
+import type { BookInfo } from "@/models/BookInfo";
 
 type RangeCardProps = {
   range: BookRange;

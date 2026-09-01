@@ -6,17 +6,13 @@ import { useBooks } from "@/hooks/Books.ts";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/constants/config";
 import type { BookRange } from "@/models/BookRange";
-import type { BookInfo } from "@/models/Book.ts";
+import type { BookInfo } from "@/models/BookInfo.ts";
 
 type ChapterEntry = { book: string; chapter: number };
 type ChapterResult = { accuracy: number; feedback: string };
 
 export function MemoryPage() {
   const { data: books = [] } = useBooks();
-  const chapterCounts: Record<string, number> = Object.fromEntries(
-    books.map((b) => [b.book, b.chapters])
-  );
-
   const [ranges, setRanges] = useState<BookRange[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, ChapterResult>>({});

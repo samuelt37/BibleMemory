@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { API_URL } from "@/constants/config";
-import type { BookInfo } from "@/models/Book";
+import type { BookInfo } from "@/models/BookInfo";
 
 async function fetchBooks(): Promise<BookInfo[]> {
   const res = await fetch(`${API_URL}/books`);

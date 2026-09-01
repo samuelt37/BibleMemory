@@ -31,8 +31,8 @@ export function Sidebar() {
   const [otOpen, setOtOpen] = useState(true);
   const [ntOpen, setNtOpen] = useState(true);
 
-  const { data: books = [], isLoading, error } = useBooks();
-  const { oldTestament, newTestament } = groupBooks(books);
+  // const { data: books = [], isLoading, error } = useBooks();
+  // const { oldTestament, newTestament } = groupBooks(books);
 
   function renderBookLink(book: string) {
     const href = `/book/${encodeURIComponent(book)}`;
@@ -102,7 +102,7 @@ export function Sidebar() {
           </Button>
         </div>
 
-        <nav className="flex flex-col gap-1 overflow-y-auto p-2">
+        {/* <nav className="flex flex-col gap-1 overflow-y-auto p-2">
           {isLoading && open && (
             <span className="px-3 py-2 text-sm text-muted-foreground">Loading…</span>
           )}
@@ -111,8 +111,8 @@ export function Sidebar() {
           )}
 
           {renderSection("Old Testament", otOpen, setOtOpen, oldTestament)}
-          {renderSection("New Testament", ntOpen, setNtOpen, newTestament)}
-        </nav>
+          {renderSection("New Testament", ntOpen, setNtOpen, newTestament)} */}
+        {/* </nav> */}
       </div>
     </TooltipProvider>
   );
