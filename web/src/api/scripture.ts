@@ -1,7 +1,7 @@
 import { API_URL } from "../constants/config";
-import type { Book } from "../models/BookInfo";
+import type { BookInfo } from "../models/BookInfo";
 
-export async function getBooks(): Promise<Book[]> {
+export async function getBooks(): Promise<BookInfo[]> {
   const response = await fetch(`${API_URL}/books`);
 
   if (!response.ok) {

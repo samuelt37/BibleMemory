@@ -2,11 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { API_URL } from "@/constants/config";
 import type { BookInfo } from "@/models/BookInfo";
 
-async function fetchBooks(): Promise<BookInfo[]> {
-  const res = await fetch(`${API_URL}/books`);
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
-  return res.json();
-}
+// async function fetchBooks(): Promise<BookInfo[]> {
+//   const res = await fetch(`${API_URL}/books`);
+//   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+//   return res.json();
+// }
 
 async function fetchChapters(bookName: string): Promise<number> {
   const res = await fetch(`${API_URL}/books/${bookName}/chapters`);
