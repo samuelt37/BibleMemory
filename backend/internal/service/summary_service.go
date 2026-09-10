@@ -30,8 +30,11 @@ func (s *SummaryService) CheckSummary(req dto.SummaryRequest) ([]dto.SummaryResu
 	if len(req.Answers) != len(req.Scripture.Ranges) {
 		return nil, fmt.Errorf("answers count (%d) does not match ranges count (%d)", len(req.Answers), len(req.Scripture.Ranges))
 	}
+	if len(req.Scripture.Ranges) == 0 {
+		return []dto.SummaryResult{}, nil
+	}
 
-	results := make([]dto.SummaryResult, len(req.Scripture.Ranges))
+	passages := make([]string, len(req.Scripture.Ranges))
 	for i, rng := range req.Scripture.Ranges {
 		singleRangeQuery := dto.ScriptureQuery{
 			Translation: req.Scripture.Translation,
@@ -42,21 +45,10 @@ func (s *SummaryService) CheckSummary(req dto.SummaryRequest) ([]dto.SummaryResu
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch range %d: %w", i, err)
 		}
-
-		realText := concatVerses(verses)
-
-		if i > 0 {
-			time.Sleep(300 * time.Millisecond)
-		}
-
-		result, err := s.gradeWithAI(req.Answers[i], realText)
-		if err != nil {
-			return nil, fmt.Errorf("failed to grade range %d: %w", i, err)
-		}
-		results[i] = result
+		passages[i] = concatVerses(verses)
 	}
 
-	return results, nil
+	return s.gradeAllWithAI(req.Answers, passages)
 }
 
 func concatVerses(verses []model.VerseInfo) string {
@@ -70,25 +62,29 @@ func concatVerses(verses []model.VerseInfo) string {
 	return sb.String()
 }
 
-func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryResult, error) {
-	prompt := fmt.Sprintf(
-		"You are evaluating whether a user's summary correctly captures the key content of a Bible passage. "+
-			"The user is NOT trying to recite the passage word-for-word — they are summarizing it in their own words. "+
-			"Judge whether their summary reflects an accurate understanding of the passage's main events, ideas, or teachings. "+
-			"Don't penalize different phrasing, paraphrasing, or omitted minor details — focus on whether the core meaning is correct.\n\n"+
-			"Rate the summary's accuracy from 1 to 10, where 10 means it fully and correctly captures the passage's key content, "+
-			"and 1 means it's missing or misrepresents the content entirely.\n\n"+
-			"Respond ONLY with valid JSON, no markdown, no explanation outside the JSON, in exactly this shape:\n"+
-			`{"accuracy": 8, "feedback": "..."}`+"\n\n"+
-			"Passage text: %s\nUser's summary: %s\n",
-		realText, userAnswer,
-	)
+func (s *SummaryService) gradeAllWithAI(userAnswers, passages []string) ([]dto.SummaryResult, error) {
+	count := len(userAnswers)
+
+	var sb strings.Builder
+	sb.WriteString("You are evaluating whether a user's summary correctly captures the key content of a Bible passage.\n")
+	sb.WriteString("The user is NOT trying to recite the passage word-for-word — they are summarizing it in their own words.\n")
+	sb.WriteString("Judge whether their summary reflects an accurate understanding of the passage's main events, ideas, or teachings.\n")
+	sb.WriteString("Don't penalize different phrasing, paraphrasing, or omitted minor details — focus on whether the core meaning is correct.\n\n")
+	sb.WriteString("Rate each summary's accuracy from 1 to 10, where 10 means it fully and correctly captures the passage's key content,\n")
+	sb.WriteString("and 1 means it's missing or misrepresents the content entirely.\n\n")
+	sb.WriteString(fmt.Sprintf("Respond ONLY with a valid JSON array of exactly %d elements matching the order of items below:\n", count))
+	sb.WriteString(`[{"accuracy": 8, "feedback": "..."}, {"accuracy": 9, "feedback": "..."}]` + "\n\n")
+	sb.WriteString("Items to evaluate:\n")
+
+	for i := 0; i < count; i++ {
+		sb.WriteString(fmt.Sprintf("--- Item %d ---\nPassage text: %s\nUser's summary: %s\n\n", i+1, passages[i], userAnswers[i]))
+	}
 
 	body := map[string]any{
 		"contents": []map[string]any{
 			{
 				"parts": []map[string]string{
-					{"text": prompt},
+					{"text": sb.String()},
 				},
 			},
 		},
@@ -98,7 +94,7 @@ func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryRe
 	}
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return dto.SummaryResult{}, err
+		return nil, err
 	}
 
 	apiKey := os.Getenv("API_KEY")
@@ -106,7 +102,7 @@ func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryRe
 		apiKey = os.Getenv("GEMINI_API_KEY")
 	}
 	if apiKey == "" {
-		return dto.SummaryResult{}, fmt.Errorf("API_KEY environment variable is not set on the server")
+		return nil, fmt.Errorf("API_KEY environment variable is not set on the server")
 	}
 
 	primaryModel := os.Getenv("GEMINI_MODEL")
@@ -131,7 +127,7 @@ func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryRe
 			url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", modelName)
 			httpReq, err := http.NewRequest("POST", url, bytes.NewReader(payload))
 			if err != nil {
-				return dto.SummaryResult{}, err
+				return nil, err
 			}
 
 			httpReq.Header.Set("Content-Type", "application/json")
@@ -163,7 +159,7 @@ func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryRe
 				var errBody bytes.Buffer
 				errBody.ReadFrom(resp.Body)
 				resp.Body.Close()
-				return dto.SummaryResult{}, fmt.Errorf("Gemini API returned status %d: %s", resp.StatusCode, errBody.String())
+				return nil, fmt.Errorf("Gemini API returned status %d: %s", resp.StatusCode, errBody.String())
 			}
 
 			var apiResp struct {
@@ -178,20 +174,36 @@ func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryRe
 			err = json.NewDecoder(resp.Body).Decode(&apiResp)
 			resp.Body.Close()
 			if err != nil {
-				return dto.SummaryResult{}, err
+				return nil, err
 			}
 			if len(apiResp.Candidates) == 0 || len(apiResp.Candidates[0].Content.Parts) == 0 {
-				return dto.SummaryResult{}, fmt.Errorf("empty response from Gemini")
+				return nil, fmt.Errorf("empty response from Gemini")
 			}
 
-			var result dto.SummaryResult
-			if err := json.Unmarshal([]byte(apiResp.Candidates[0].Content.Parts[0].Text), &result); err != nil {
-				return dto.SummaryResult{}, fmt.Errorf("failed to parse Gemini response: %w", err)
+			rawText := strings.TrimSpace(apiResp.Candidates[0].Content.Parts[0].Text)
+			var results []dto.SummaryResult
+			if err := json.Unmarshal([]byte(rawText), &results); err != nil {
+				var single dto.SummaryResult
+				if err2 := json.Unmarshal([]byte(rawText), &single); err2 == nil {
+					results = []dto.SummaryResult{single}
+				} else {
+					return nil, fmt.Errorf("failed to parse Gemini response: %w (raw: %s)", err, rawText)
+				}
 			}
 
-			return result, nil
+			for len(results) < count {
+				results = append(results, dto.SummaryResult{
+					Accuracy: 5,
+					Feedback: "Passage evaluated.",
+				})
+			}
+			if len(results) > count {
+				results = results[:count]
+			}
+
+			return results, nil
 		}
 	}
 
-	return dto.SummaryResult{}, fmt.Errorf("grading failed after retries: %w", lastErr)
+	return nil, fmt.Errorf("grading failed after retries: %w", lastErr)
 }
