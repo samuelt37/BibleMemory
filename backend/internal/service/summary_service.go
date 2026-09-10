@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/samuelt37/BibleMemory/internal/dto"
 	"github.com/samuelt37/BibleMemory/internal/model"
@@ -96,11 +97,6 @@ func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryRe
 		return dto.SummaryResult{}, err
 	}
 
-	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
-	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(payload))
-	if err != nil {
-		return dto.SummaryResult{}, err
-	}
 	apiKey := os.Getenv("API_KEY")
 	if apiKey == "" {
 		apiKey = os.Getenv("GEMINI_API_KEY")
@@ -109,41 +105,79 @@ func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryRe
 		return dto.SummaryResult{}, fmt.Errorf("API_KEY environment variable is not set on the server")
 	}
 
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", apiKey)
-
-	resp, err := http.DefaultClient.Do(httpReq)
-	if err != nil {
-		return dto.SummaryResult{}, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		var errBody bytes.Buffer
-		errBody.ReadFrom(resp.Body)
-		return dto.SummaryResult{}, fmt.Errorf("Gemini API returned status %d: %s", resp.StatusCode, errBody.String())
+	primaryModel := os.Getenv("GEMINI_MODEL")
+	if primaryModel == "" {
+		primaryModel = "gemini-2.5-flash"
 	}
 
-	var apiResp struct {
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return dto.SummaryResult{}, err
-	}
-	if len(apiResp.Candidates) == 0 || len(apiResp.Candidates[0].Content.Parts) == 0 {
-		return dto.SummaryResult{}, fmt.Errorf("empty response from Gemini")
+	modelsToTry := []string{primaryModel}
+	if primaryModel != "gemini-2.5-flash-lite" {
+		modelsToTry = append(modelsToTry, "gemini-2.5-flash-lite")
 	}
 
-	var result dto.SummaryResult
-	if err := json.Unmarshal([]byte(apiResp.Candidates[0].Content.Parts[0].Text), &result); err != nil {
-		return dto.SummaryResult{}, fmt.Errorf("failed to parse Gemini response: %w", err)
+	var lastErr error
+	for _, modelName := range modelsToTry {
+		for attempt := 0; attempt < 3; attempt++ {
+			if attempt > 0 {
+				time.Sleep(time.Duration(attempt) * time.Second)
+			}
+
+			url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", modelName)
+			httpReq, err := http.NewRequest("POST", url, bytes.NewReader(payload))
+			if err != nil {
+				return dto.SummaryResult{}, err
+			}
+
+			httpReq.Header.Set("Content-Type", "application/json")
+			httpReq.Header.Set("x-goog-api-key", apiKey)
+
+			resp, err := http.DefaultClient.Do(httpReq)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+
+			if resp.StatusCode == http.StatusServiceUnavailable || resp.StatusCode == http.StatusTooManyRequests {
+				var errBody bytes.Buffer
+				errBody.ReadFrom(resp.Body)
+				resp.Body.Close()
+				lastErr = fmt.Errorf("Gemini API returned status %d for model %s: %s", resp.StatusCode, modelName, errBody.String())
+				continue
+			}
+
+			if resp.StatusCode != http.StatusOK {
+				var errBody bytes.Buffer
+				errBody.ReadFrom(resp.Body)
+				resp.Body.Close()
+				return dto.SummaryResult{}, fmt.Errorf("Gemini API returned status %d: %s", resp.StatusCode, errBody.String())
+			}
+
+			var apiResp struct {
+				Candidates []struct {
+					Content struct {
+						Parts []struct {
+							Text string `json:"text"`
+						} `json:"parts"`
+					} `json:"content"`
+				} `json:"candidates"`
+			}
+			err = json.NewDecoder(resp.Body).Decode(&apiResp)
+			resp.Body.Close()
+			if err != nil {
+				return dto.SummaryResult{}, err
+			}
+			if len(apiResp.Candidates) == 0 || len(apiResp.Candidates[0].Content.Parts) == 0 {
+				return dto.SummaryResult{}, fmt.Errorf("empty response from Gemini")
+			}
+
+			var result dto.SummaryResult
+			if err := json.Unmarshal([]byte(apiResp.Candidates[0].Content.Parts[0].Text), &result); err != nil {
+				return dto.SummaryResult{}, fmt.Errorf("failed to parse Gemini response: %w", err)
+			}
+
+			return result, nil
+		}
 	}
 
-	return result, nil
+	return dto.SummaryResult{}, fmt.Errorf("grading failed after retries: %w", lastErr)
 }
