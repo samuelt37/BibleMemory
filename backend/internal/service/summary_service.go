@@ -45,6 +45,10 @@ func (s *SummaryService) CheckSummary(req dto.SummaryRequest) ([]dto.SummaryResu
 
 		realText := concatVerses(verses)
 
+		if i > 0 {
+			time.Sleep(300 * time.Millisecond)
+		}
+
 		result, err := s.gradeWithAI(req.Answers[i], realText)
 		if err != nil {
 			return nil, fmt.Errorf("failed to grade range %d: %w", i, err)
@@ -107,19 +111,21 @@ func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryRe
 
 	primaryModel := os.Getenv("GEMINI_MODEL")
 	if primaryModel == "" {
-		primaryModel = "gemini-2.5-flash"
+		primaryModel = "gemini-3.6-flash"
 	}
 
 	modelsToTry := []string{primaryModel}
-	if primaryModel != "gemini-2.5-flash-lite" {
-		modelsToTry = append(modelsToTry, "gemini-2.5-flash-lite")
+	for _, fallback := range []string{"gemini-3.5-flash", "gemini-3.7-flash"} {
+		if fallback != primaryModel {
+			modelsToTry = append(modelsToTry, fallback)
+		}
 	}
 
 	var lastErr error
 	for _, modelName := range modelsToTry {
 		for attempt := 0; attempt < 3; attempt++ {
 			if attempt > 0 {
-				time.Sleep(time.Duration(attempt) * time.Second)
+				time.Sleep(time.Duration(attempt*1500) * time.Millisecond)
 			}
 
 			url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", modelName)
@@ -143,6 +149,14 @@ func (s *SummaryService) gradeWithAI(userAnswer, realText string) (dto.SummaryRe
 				resp.Body.Close()
 				lastErr = fmt.Errorf("Gemini API returned status %d for model %s: %s", resp.StatusCode, modelName, errBody.String())
 				continue
+			}
+
+			if resp.StatusCode == http.StatusNotFound {
+				var errBody bytes.Buffer
+				errBody.ReadFrom(resp.Body)
+				resp.Body.Close()
+				lastErr = fmt.Errorf("Gemini API returned status 404 for model %s: %s", modelName, errBody.String())
+				break
 			}
 
 			if resp.StatusCode != http.StatusOK {
