@@ -12,37 +12,19 @@ import (
 func Connect() (*sql.DB, error) {
 	connString := os.Getenv("DATABASE_URL")
 	if connString == "" {
-		host := os.Getenv("DB_HOST")
-		port := os.Getenv("DB_PORT")
-		user := os.Getenv("DB_USER")
-		password := os.Getenv("DB_PASSWORD")
-		dbname := os.Getenv("DB_NAME")
-		sslmode := os.Getenv("DB_SSLMODE")
-		if sslmode == "" {
-			sslmode = "disable"
-		}
-
-		connString = fmt.Sprintf(
-			"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-			host,
-			port,
-			user,
-			password,
-			dbname,
-			sslmode,
-		)
+		return nil, fmt.Errorf("DATABASE_URL environment variable is not set")
 	}
 
 	db, err := sql.Open("postgres", connString)
 
 	for i := 0; i < 10; i++ {
-	    err = db.Ping()
-	    if err == nil {
-	        return db, nil
-	    }
+		err = db.Ping()
+		if err == nil {
+			return db, nil
+		}
 
-	    fmt.Println("Waiting for database...")
-	    time.Sleep(time.Second)
+		fmt.Println("Waiting for database...")
+		time.Sleep(time.Second)
 	}
 
 	return nil, err

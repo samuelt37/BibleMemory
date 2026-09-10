@@ -1,9 +1,3 @@
-databases:
-  - name: bible-db
-    databaseName: bible_memory
-    user: bible_user
-    plan: free
-
 services:
   # 1. Backend Web Service (Go + Docker)
   - type: web
@@ -14,26 +8,8 @@ services:
     dockerContext: .
     plan: free
     envVars:
-      - key: DB_HOST
-        fromDatabase:
-          name: bible-db
-          property: host
-      - key: DB_PORT
-        fromDatabase:
-          name: bible-db
-          property: port
-      - key: DB_USER
-        fromDatabase:
-          name: bible-db
-          property: user
-      - key: DB_PASSWORD
-        fromDatabase:
-          name: bible-db
-          property: password
-      - key: DB_NAME
-        fromDatabase:
-          name: bible-db
-          property: database
+      - key: DATABASE_URL
+        sync: false
       - key: PORT
         value: 8080
 
