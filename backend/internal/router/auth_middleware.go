@@ -1,35 +1,40 @@
 package router
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/clerk/clerk-sdk-go/v2/jwt"
+	"github.com/samuelt37/BibleMemory/internal/auth"
+	"github.com/samuelt37/BibleMemory/internal/service"
 )
 
-type contextKey string
+func RequireAuth(userService *service.UserService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sessionToken := extractBearerToken(r)
+			if sessionToken == "" {
+				http.Error(w, "missing authorization token", http.StatusUnauthorized)
+				return
+			}
 
-const userIDKey contextKey = "clerkUserID"
+			claims, err := jwt.Verify(r.Context(), &jwt.VerifyParams{
+				Token: sessionToken,
+			})
+			if err != nil {
+				http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+				return
+			}
 
-func RequireAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sessionToken := extractBearerToken(r)
-		if sessionToken == "" {
-			http.Error(w, "missing authorization token", http.StatusUnauthorized)
-			return
-		}
+			internalUserID, err := userService.EnsureUser(claims.Subject)
+			if err != nil {
+				http.Error(w, "failed to resolve user", http.StatusInternalServerError)
+				return
+			}
 
-		claims, err := jwt.Verify(r.Context(), &jwt.VerifyParams{
-			Token: sessionToken,
+			ctx := auth.WithUserID(r.Context(), internalUserID)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
-		if err != nil {
-			http.Error(w, "invalid or expired token", http.StatusUnauthorized)
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), userIDKey, claims.Subject)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+	}
 }
 
 func extractBearerToken(r *http.Request) string {
@@ -39,10 +44,4 @@ func extractBearerToken(r *http.Request) string {
 		return header[len(prefix):]
 	}
 	return ""
-}
-
-// UserIDFromContext lets handlers pull the authenticated Clerk user ID
-func UserIDFromContext(ctx context.Context) (string, bool) {
-	id, ok := ctx.Value(userIDKey).(string)
-	return id, ok
 }

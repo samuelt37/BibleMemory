@@ -8,21 +8,14 @@ import (
 	"strconv"
 	"strings"
 
+	clerk "github.com/clerk/clerk-sdk-go/v2"
 	"github.com/samuelt37/BibleMemory/internal/database"
 	"github.com/samuelt37/BibleMemory/internal/importer"
+	"github.com/samuelt37/BibleMemory/internal/model"
 )
 
-type VerseRecord struct {
-	Translation string
-	Testament   string
-	BookOrder   int
-	Book        string
-	Chapter     int
-	Verse       int
-	Text        string
-}
-
 func main() {
+	clerk.SetKey(os.Getenv("CLERK_SECRET_KEY"))
 	db, err := database.Connect()
 	if err != nil {
 		panic(err)
@@ -100,7 +93,7 @@ func main() {
 			testament = "New"
 		}
 
-		var records []VerseRecord
+		var records []model.VerseRecord
 		for _, chapter := range book.Chapters {
 			chapterNum, err := strconv.Atoi(chapter.Chapter)
 			if err != nil {
@@ -113,7 +106,7 @@ func main() {
 					panic(err)
 				}
 
-				records = append(records, VerseRecord{
+				records = append(records, model.VerseRecord{
 					Translation: "KJV",
 					Testament:   testament,
 					BookOrder:   bookNum,

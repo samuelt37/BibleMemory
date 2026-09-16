@@ -1,13 +1,15 @@
 // pages/MemoryPage.tsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MemoryCard } from "../components/MemoryCard.tsx";
 import { RangeCard } from "../components/RangeCard.tsx";
 import { useBooks } from "@/hooks/Books.ts";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/constants/config";
-import type { BookRange } from "@/models/BookRange";
-import { isWholeChapterRange } from "@/models/BookRange";
+import type { BookRange, ScriptureRangeDTO } from "@/models/BookRange";
+import { bookRangeToDTO, isWholeChapterRange } from "@/models/BookRange";
 import type { BookInfo } from "@/models/BookInfo.ts";
+import { useMemorySession } from "@/context/MemorySessionContext";
+import { useDeleteSession, useSaveSession, useSessionHistory } from "@/hooks/useSessions";
 
 type MemoryUnit =
   | { kind: "chapter"; key: string; book: string; bookId: number; chapter: number; label: string }
@@ -52,9 +54,17 @@ function buildMemoryUnits(ranges: BookRange[]): MemoryUnit[] {
 export function MemoryPage() {
   const { data: books = [] } = useBooks();
 
-  const [ranges, setRanges] = useState<BookRange[]>([]);
+  const { ranges, setRanges, loadVersion } = useMemorySession();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, ChapterResult>>({});
+  const { mutate: saveSession } = useSaveSession();
+  const { mutate: deleteSession } = useDeleteSession();
+  const { data: history = [] } = useSessionHistory();
+
+  useEffect(() => {
+    setAnswers({});
+    setResults({});
+  }, [loadVersion]);
 
   const updateRange = (id: number, patch: Partial<BookRange>) =>
     setRanges((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -73,7 +83,32 @@ export function MemoryPage() {
 
   const memoryUnits = buildMemoryUnits(ranges);
 
+  function rangesSignature(ranges: BookRange[]): string {
+    return ranges
+      .map((r) => `${r.start.bookId}:${r.start.chapter}:${r.start.verse ?? ""}-${r.end.bookId}:${r.end.chapter}:${r.end.verse ?? ""}`)
+      .sort()
+      .join("|");
+  }
+
+  function sessionSignatureFromDTO(ranges: ScriptureRangeDTO[]): string {
+    return ranges
+      .map((r) => `${r.startBookId}:${r.startChapter}:${r.startVerse ?? ""}-${r.endBookId}:${r.endChapter}:${r.endVerse ?? ""}`)
+      .sort()
+      .join("|");
+  }
+
   async function handleCheckAll() {
+    const signature = rangesSignature(ranges);
+    const duplicate = history.find((session) => sessionSignatureFromDTO(session.ranges) === signature);
+
+    if (duplicate) {
+      deleteSession(duplicate.id, {
+        onSuccess: () => saveSession(ranges.map(bookRangeToDTO)),
+      });
+    } else {
+      saveSession(ranges.map(bookRangeToDTO));
+    }
+
     const scriptureRanges = memoryUnits.map((u) =>
       u.kind === "chapter"
         ? {

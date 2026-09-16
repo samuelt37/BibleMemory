@@ -6,9 +6,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/samuelt37/BibleMemory/internal/handler"
+	"github.com/samuelt37/BibleMemory/internal/service"
 )
 
-func NewRouter() *chi.Mux {
+func NewRouter(
+	scriptureHandler *handler.ScriptureHandler,
+	sessionHandler *handler.SessionHandler,
+	userService *service.UserService,
+) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(cors.Handler(cors.Options{
@@ -27,6 +32,15 @@ func NewRouter() *chi.Mux {
 	})
 
 	r.Get("/health", handler.Health)
+
+	r.Group(func(protected chi.Router) {
+		protected.Use(RequireAuth(userService))
+		protected.Post("/sessions", sessionHandler.Save)
+		protected.Get("/sessions/history", sessionHandler.History)
+		protected.Get("/sessions/bookmarks", sessionHandler.Bookmarks)
+		protected.Patch("/sessions/{id}/bookmark", sessionHandler.ToggleBookmark)
+		protected.Delete("/sessions/{id}", sessionHandler.Delete)
+	})
 
 	return r
 }

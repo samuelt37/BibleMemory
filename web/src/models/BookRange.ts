@@ -20,3 +20,23 @@ export function isWholeChapterRange(r: BookRange): boolean {
     r.start.bookId === r.end.bookId
   );
 }
+
+export type ScriptureRangeDTO = {
+  startBookId: number;
+  startChapter: number;
+  startVerse: number | null;
+  endBookId: number;
+  endChapter: number;
+  endVerse: number | null;
+};
+
+export function bookRangeToDTO(r: BookRange): ScriptureRangeDTO {
+  return {
+    startBookId: r.start.bookId,
+    startChapter: r.start.chapter,
+    startVerse: r.start.verse,
+    endBookId: r.end.bookId,
+    endChapter: r.end.chapter,
+    endVerse: r.end.verse,
+  };
+}
