@@ -10,6 +10,8 @@ import { bookRangeToDTO, isWholeChapterRange } from "@/models/BookRange";
 import type { BookInfo } from "@/models/BookInfo.ts";
 import { useMemorySession } from "@/context/MemorySessionContext";
 import { useDeleteSession, useSaveSession, useSessionHistory } from "@/hooks/useSessions";
+import { SignedOut, SignInButton, useUser } from "@clerk/clerk-react";
+import { BookOpen, LogIn } from "lucide-react";
 
 type MemoryUnit =
   | { kind: "chapter"; key: string; book: string; bookId: number; chapter: number; label: string }
@@ -60,6 +62,7 @@ export function MemoryPage() {
   const { mutate: saveSession } = useSaveSession();
   const { mutate: deleteSession } = useDeleteSession();
   const { data: history = [] } = useSessionHistory();
+  const { isSignedIn } = useUser();
 
   useEffect(() => {
     setAnswers({});
@@ -98,15 +101,17 @@ export function MemoryPage() {
   }
 
   async function handleCheckAll() {
-    const signature = rangesSignature(ranges);
-    const duplicate = history.find((session) => sessionSignatureFromDTO(session.ranges) === signature);
+    if (isSignedIn) {
+      const signature = rangesSignature(ranges);
+      const duplicate = history.find((session) => sessionSignatureFromDTO(session.ranges) === signature);
 
-    if (duplicate) {
-      deleteSession(duplicate.id, {
-        onSuccess: () => saveSession(ranges.map(bookRangeToDTO)),
-      });
-    } else {
-      saveSession(ranges.map(bookRangeToDTO));
+      if (duplicate) {
+        deleteSession(duplicate.id, {
+          onSuccess: () => saveSession(ranges.map(bookRangeToDTO)),
+        });
+      } else {
+        saveSession(ranges.map(bookRangeToDTO));
+      }
     }
 
     const scriptureRanges = memoryUnits.map((u) =>
@@ -184,17 +189,39 @@ export function MemoryPage() {
           </select>
         </div>
 
-        <div className="flex flex-col gap-4">
-          {memoryUnits.map((u) => (
-            <MemoryCard
-              key={u.key}
-              sectionTitle={u.label}
-              value={answers[u.key] ?? ""}
-              onChange={(value) => setAnswers((prev) => ({ ...prev, [u.key]: value }))}
-              result={results[u.key]}
-            />
-          ))}
-        </div>
+        {ranges.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+            <BookOpen size={32} className="text-muted-foreground" strokeWidth={1.5} />
+            <div className="flex flex-col gap-1.5 max-w-sm">
+              <p className="text-base font-semibold">Nothing to summarize yet</p>
+              <p className="text-sm text-muted-foreground">
+                Add a book above to start reviewing your memory.
+              </p>
+            </div>
+            <SignedOut>
+              <p className="text-xs text-muted-foreground mt-2 pt-3 border-t max-w-sm">
+                <SignInButton mode="modal">
+                  <button type="button" className="font-semibold underline underline-offset-2 hover:text-foreground">
+                    Log in
+                  </button>
+                </SignInButton>
+                {" "}to upload your own notes and factor them into grading.
+              </p>
+            </SignedOut>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {memoryUnits.map((u) => (
+              <MemoryCard
+                key={u.key}
+                sectionTitle={u.label}
+                value={answers[u.key] ?? ""}
+                onChange={(value) => setAnswers((prev) => ({ ...prev, [u.key]: value }))}
+                result={results[u.key]}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="border-t bg-background px-6 py-3 flex justify-end shrink-0">
