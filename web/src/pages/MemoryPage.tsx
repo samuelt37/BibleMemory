@@ -11,7 +11,7 @@ import type { BookInfo } from "@/models/BookInfo.ts";
 import { useMemorySession } from "@/context/MemorySessionContext";
 import { useDeleteSession, useSaveSession, useSessionHistory } from "@/hooks/useSessions";
 import { SignedOut, SignInButton, useUser } from "@clerk/clerk-react";
-import { BookOpen, LogIn } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
 type MemoryUnit =
   | { kind: "chapter"; key: string; book: string; bookId: number; chapter: number; label: string }
