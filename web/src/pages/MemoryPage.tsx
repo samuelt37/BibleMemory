@@ -11,7 +11,7 @@ import type { BookInfo } from "@/models/BookInfo.ts";
 import { useMemorySession } from "@/context/MemorySessionContext";
 import { useDeleteSession, useSaveSession, useSessionHistory } from "@/hooks/useSessions";
 import { SignedOut, SignInButton, useUser } from "@clerk/clerk-react";
-import { BookOpen } from "lucide-react";
+import { BookOpen, Loader2 } from "lucide-react";
 
 type MemoryUnit =
   | { kind: "chapter"; key: string; book: string; bookId: number; chapter: number; label: string }
@@ -64,6 +64,8 @@ export function MemoryPage() {
   const { data: history = [] } = useSessionHistory();
   const { isSignedIn } = useUser();
 
+  const [isChecking, setIsChecking] = useState(false);
+
   useEffect(() => {
     setAnswers({});
     setResults({});
@@ -101,63 +103,68 @@ export function MemoryPage() {
   }
 
   async function handleCheckAll() {
-    if (isSignedIn) {
-      const signature = rangesSignature(ranges);
-      const duplicate = history.find((session) => sessionSignatureFromDTO(session.ranges) === signature);
+    setIsChecking(true);
+    try {
+      if (isSignedIn) {
+        const signature = rangesSignature(ranges);
+        const duplicate = history.find((session) => sessionSignatureFromDTO(session.ranges) === signature);
 
-      if (duplicate) {
-        deleteSession(duplicate.id, {
-          onSuccess: () => saveSession(ranges.map(bookRangeToDTO)),
-        });
-      } else {
-        saveSession(ranges.map(bookRangeToDTO));
+        if (duplicate) {
+          deleteSession(duplicate.id, {
+            onSuccess: () => saveSession(ranges.map(bookRangeToDTO)),
+          });
+        } else {
+          saveSession(ranges.map(bookRangeToDTO));
+        }
       }
+
+      const scriptureRanges = memoryUnits.map((u) =>
+        u.kind === "chapter"
+          ? {
+              start: { book: u.bookId, chapter: u.chapter, verse: null },
+              end: { book: u.bookId, chapter: u.chapter, verse: null },
+            }
+          : {
+              start: {
+                book: u.range.start.bookId,
+                chapter: u.range.start.chapter,
+                verse: u.range.start.verse,
+              },
+              end: {
+                book: u.range.end.bookId,
+                chapter: u.range.end.chapter,
+                verse: u.range.end.verse,
+              },
+            }
+      );
+
+      const answersList = memoryUnits.map((u) => answers[u.key] ?? "");
+
+      const res = await fetch(`${API_URL}/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scripture: { translation: "KJV", ranges: scriptureRanges },
+          answers: answersList,
+        }),
+      });
+
+      if (!res.ok) {
+        console.error("Check failed:", res.status);
+        return;
+      }
+
+      const resultsList: ChapterResult[] = await res.json();
+
+      const resultsByUnit: Record<string, ChapterResult> = {};
+      memoryUnits.forEach((u, i) => {
+        resultsByUnit[u.key] = resultsList[i];
+      });
+
+      setResults(resultsByUnit);
+    } finally {
+      setIsChecking(false);
     }
-
-    const scriptureRanges = memoryUnits.map((u) =>
-      u.kind === "chapter"
-        ? {
-            start: { book: u.bookId, chapter: u.chapter, verse: null },
-            end: { book: u.bookId, chapter: u.chapter, verse: null },
-          }
-        : {
-            start: {
-              book: u.range.start.bookId,
-              chapter: u.range.start.chapter,
-              verse: u.range.start.verse,
-            },
-            end: {
-              book: u.range.end.bookId,
-              chapter: u.range.end.chapter,
-              verse: u.range.end.verse,
-            },
-          }
-    );
-
-    const answersList = memoryUnits.map((u) => answers[u.key] ?? "");
-
-    const res = await fetch(`${API_URL}/check`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        scripture: { translation: "KJV", ranges: scriptureRanges },
-        answers: answersList,
-      }),
-    });
-
-    if (!res.ok) {
-      console.error("Check failed:", res.status);
-      return;
-    }
-
-    const resultsList: ChapterResult[] = await res.json();
-
-    const resultsByUnit: Record<string, ChapterResult> = {};
-    memoryUnits.forEach((u, i) => {
-      resultsByUnit[u.key] = resultsList[i];
-    });
-
-    setResults(resultsByUnit);
   }
 
   return (
@@ -224,8 +231,17 @@ export function MemoryPage() {
         )}
       </div>
 
-      <div className="border-t bg-background py-2 flex justify-end shrink-0">
-        <Button onClick={handleCheckAll}>Check</Button>
+      <div className="border-t bg-background px-6 h-14 flex items-center justify-end shrink-0">
+        <Button onClick={handleCheckAll} disabled={isChecking}>
+          {isChecking ? (
+            <>
+              <Loader2 size={16} className="mr-2 animate-spin" />
+              Checking...
+            </>
+          ) : (
+            "Check"
+          )}
+        </Button>
       </div>
     </div>
   );

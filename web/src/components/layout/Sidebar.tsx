@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown, LogIn, History, Bookmark, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, LogIn, History, Bookmark, X, Upload } from "lucide-react";
+import { Link } from "react-router-dom";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMemorySession } from "@/context/MemorySessionContext";
 import { useBooks } from "@/hooks/Books";
 import type { BookRange, ScriptureRangeDTO } from "@/models/BookRange";
@@ -152,6 +153,30 @@ export function Sidebar() {
 
         <SignedIn>
           <div className="flex flex-col gap-1 p-2 overflow-y-auto">
+            {/* Prominent, elevated position */}
+            {open ? (
+              <Link
+                to="/notes"
+                className="flex items-center gap-3 rounded-md bg-primary text-primary-foreground px-3 py-2.5 text-sm font-medium hover:bg-primary/90 mb-2"
+              >
+                <Upload size={18} className="shrink-0" />
+                <span>Upload notes</span>
+              </Link>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Link
+                      to="/notes"
+                      className="flex items-center justify-center rounded-md bg-primary text-primary-foreground p-2.5 hover:bg-primary/90 mb-2"
+                    >
+                      <Upload size={18} />
+                    </Link>
+                  }
+                />
+                <TooltipContent side="right">Upload notes</TooltipContent>
+              </Tooltip>
+            )}
             <DropdownSection
               label="Saved Sessions"
               icon={<Bookmark size={18} />}
@@ -179,7 +204,7 @@ export function Sidebar() {
 
         <div className="flex-1" />
 
-        <div className="border-t p-2">
+        <div className="border-t px-2 h-14 flex items-center">
           <SignedOut>
             <SignInButton mode="modal">
               <Button variant="ghost" className="w-full justify-start gap-3 px-3">
