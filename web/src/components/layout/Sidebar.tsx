@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, LogIn, History, Bookmark, X, Upload } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -118,6 +118,9 @@ export function Sidebar() {
   const { loadRanges } = useMemorySession();
   const { mutate: deleteSession } = useDeleteSession();
 
+  const navigate = useNavigate();
+  const location = useLocation();
+
   function dtoToBookRange(dto: ScriptureRangeDTO, id: number): BookRange {
     const startBook = books.find((b) => b.id === dto.startBookId);
     const endBook = books.find((b) => b.id === dto.endBookId);
@@ -131,6 +134,9 @@ export function Sidebar() {
   const handleSelect = (session: MemorySession) => {
     const bookRanges = session.ranges.map((dto, i) => dtoToBookRange(dto, i + 1));
     loadRanges(bookRanges);
+    if (location.pathname !== "/") {
+      navigate("/");
+    }
   };
 
   const handleDelete = (session: MemorySession) => {

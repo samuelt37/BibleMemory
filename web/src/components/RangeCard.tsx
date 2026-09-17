@@ -97,7 +97,7 @@ function PositionPicker({
 }
 
 export function RangeCard({ range, books, onUpdate, onRemove }: RangeCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   const startBook = books.find((b) => b.id === range.start.bookId);
   const isFullBook =

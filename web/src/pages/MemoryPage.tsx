@@ -202,7 +202,7 @@ export function MemoryPage() {
             <div className="flex flex-col gap-1.5 max-w-sm">
               <p className="text-base font-semibold">Nothing to summarize yet</p>
               <p className="text-sm text-muted-foreground">
-                Add a book above to start reviewing your memory.
+                Add a passage above to start reviewing your memory.
               </p>
             </div>
             <SignedOut>
