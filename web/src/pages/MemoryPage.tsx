@@ -224,7 +224,7 @@ export function MemoryPage() {
         )}
       </div>
 
-      <div className="border-t bg-background px-6 py-3 flex justify-end shrink-0">
+      <div className="border-t bg-background py-2 flex justify-end shrink-0">
         <Button onClick={handleCheckAll}>Check</Button>
       </div>
     </div>
