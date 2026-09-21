@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/samuelt37/BibleMemory/internal/repository"
 	"github.com/samuelt37/BibleMemory/internal/router"
 	"github.com/samuelt37/BibleMemory/internal/service"
+	"github.com/samuelt37/BibleMemory/internal/storage"
 )
 
 func main() {
@@ -49,7 +51,17 @@ func main() {
 	sessionService := service.NewSessionService(sessionRepo)
 	sessionHandler := handler.NewSessionHandler(sessionService)
 
-	r := router.NewRouter(scriptureHandler, sessionHandler, userService)
+	r2Client, err := storage.NewR2Client(context.Background())
+	if err != nil {
+		panic(err)
+	}
+
+	noteRepo := repository.NewNoteRepository(db)
+	noteChunkRepo := repository.NewNoteChunkRepository(db)
+	noteService := service.NewNoteService(noteRepo, noteChunkRepo, scriptureRepo, r2Client)
+	noteHandler := handler.NewNoteHandler(noteService)
+
+	r := router.NewRouter(scriptureHandler, sessionHandler, noteHandler, userService)
 	router.RegisterScriptureRoutes(r, scriptureHandler)
 	router.RegisterSummaryRoutes(r, summaryHandler)
 

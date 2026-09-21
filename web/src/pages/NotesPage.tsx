@@ -1,69 +1,66 @@
 // pages/NotesPage.tsx
 import { useState, useRef } from "react";
-import { Upload, FileText, X, Pencil, Check } from "lucide-react";
+import { Upload, FileText, X, Download, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  useNotesList,
+  useUploadNote,
+  useUploadTextNote,
+  useDeleteNote,
+  fetchNoteDownloadURL,
+} from "@/hooks/useNotes";
+import { useAuth } from "@clerk/clerk-react";
 
-type SuggestedMatch = {
-  id: number;
-  book: string;
-  chapter: number;
-  verse: number | null;
-};
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
-type Note = {
-  id: number;
-  name: string;
-  uploadedAt: string;
-  status: "matching" | "matched";
-  matches: SuggestedMatch[];
-};
-
-const mockNotes: Note[] = [
-  {
-    id: 1,
-    name: "Genesis 1 study notes.pdf",
-    uploadedAt: "2026-09-14",
-    status: "matched",
-    matches: [{ id: 1, book: "Genesis", chapter: 1, verse: null }],
-  },
-  {
-    id: 2,
-    name: "James chapter outline.docx",
-    uploadedAt: "2026-09-10",
-    status: "matched",
-    matches: [{ id: 1, book: "James", chapter: 1, verse: null }],
-  },
-];
-
-function matchLabel(m: SuggestedMatch): string {
-  return m.verse !== null ? `${m.book} ${m.chapter}:${m.verse}` : `${m.book} ${m.chapter}`;
+function statusLabel(status: string): string {
+  switch (status) {
+    case "processing":
+      return "Processing…";
+    case "ready":
+      return "Ready";
+    case "failed":
+      return "Failed to process";
+    default:
+      return status;
+  }
 }
 
 export function NotesPage() {
-  const [notes, setNotes] = useState<Note[]>(mockNotes);
-  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const { data: notesData, isLoading } = useNotesList();
+  const notes = notesData ?? [];
+  const { mutate: uploadNote } = useUploadNote();
+  const { mutate: uploadTextNote } = useUploadTextNote();
+  const { mutate: deleteNote } = useDeleteNote();
+  const { getToken } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [pasteMode, setPasteMode] = useState(false);
+  const [pasteTitle, setPasteTitle] = useState("");
+  const [pasteText, setPasteText] = useState("");
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    // TODO: upload to backend, backend runs matching, returns suggested matches
-    console.log("Uploading:", files);
+    Array.from(files).forEach((file) => uploadNote(file));
     e.target.value = "";
   };
 
-  const removeMatch = (noteId: number, matchId: number) => {
-    setNotes((prev) =>
-      prev.map((n) =>
-        n.id === noteId ? { ...n, matches: n.matches.filter((m) => m.id !== matchId) } : n
-      )
-    );
-    // TODO: PATCH backend
+  const handlePasteSubmit = () => {
+    if (!pasteText.trim()) return;
+    uploadTextNote({ title: pasteTitle, text: pasteText });
+    setPasteTitle("");
+    setPasteText("");
+    setPasteMode(false);
   };
 
-  const removeNote = (noteId: number) => {
-    setNotes((prev) => prev.filter((n) => n.id !== noteId));
-    // TODO: DELETE backend
+  const handleDownload = async (noteId: number) => {
+    const url = await fetchNoteDownloadURL(getToken, noteId);
+    window.open(url, "_blank");
   };
 
   return (
@@ -71,10 +68,16 @@ export function NotesPage() {
       <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold">Notes</h1>
-          <Button onClick={() => fileInputRef.current?.click()}>
-            <Upload size={16} className="mr-2" />
-            Upload note
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setPasteMode((v) => !v)}>
+              <Type size={16} className="mr-2" />
+              Paste text
+            </Button>
+            <Button onClick={() => fileInputRef.current?.click()}>
+              <Upload size={16} className="mr-2" />
+              Upload note
+            </Button>
+          </div>
           <input
             ref={fileInputRef}
             type="file"
@@ -85,70 +88,71 @@ export function NotesPage() {
           />
         </div>
 
-        {notes.length === 0 ? (
+        {pasteMode && (
+          <div className="p-4 border rounded-lg bg-card flex flex-col gap-2">
+            <input
+              type="text"
+              placeholder="Title (optional)"
+              value={pasteTitle}
+              onChange={(e) => setPasteTitle(e.target.value)}
+              className="rounded-md border p-2 text-sm"
+            />
+            <textarea
+              placeholder="Paste your notes here..."
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              rows={6}
+              className="rounded-md border p-2 text-sm resize-none"
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setPasteMode(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handlePasteSubmit}>
+                Save
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {isLoading ? (
+          <p className="text-muted-foreground text-sm">Loading…</p>
+        ) : notes.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            No notes yet — upload a PDF, doc, or image and we'll match it to relevant verses.
+            No notes yet — upload a file or paste text and we'll match it to relevant verses.
           </p>
         ) : (
           <div className="flex flex-col gap-3">
             {notes.map((note) => (
-              <div key={note.id} className="p-4 border rounded-lg bg-card text-card-foreground shadow-xs flex flex-col gap-3">
-                <div className="flex items-center gap-3">
-                  <FileText size={20} className="text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{note.name}</p>
-                    <p className="text-xs text-muted-foreground">{note.uploadedAt}</p>
-                  </div>
+              <div key={note.id} className="p-4 border rounded-lg bg-card text-card-foreground shadow-xs flex items-center gap-3">
+                <FileText size={20} className="text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm truncate">{note.filename}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {note.sourceType === "file" && note.fileSize
+                      ? `${formatFileSize(note.fileSize)} · `
+                      : ""}
+                    {statusLabel(note.status)}
+                  </p>
+                </div>
+                {note.sourceType === "file" && (
                   <button
                     type="button"
-                    onClick={() => removeNote(note.id)}
+                    onClick={() => handleDownload(note.id)}
                     className="rounded p-1 text-muted-foreground hover:bg-accent/10 hover:text-foreground"
-                    aria-label="Remove note"
+                    aria-label="Download"
                   >
-                    <X className="size-4" />
+                    <Download className="size-4" />
                   </button>
-                </div>
-
-                {note.status === "matching" ? (
-                  <p className="text-xs text-muted-foreground">Matching to verses…</p>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {note.matches.map((m) => (
-                      <span
-                        key={m.id}
-                        className="flex items-center gap-1.5 rounded-full bg-accent/10 text-accent-foreground pl-3 pr-1.5 py-1 text-sm"
-                      >
-                        {matchLabel(m)}
-                        {editingNoteId === note.id && (
-                          <button
-                            type="button"
-                            onClick={() => removeMatch(note.id, m.id)}
-                            className="rounded-full p-0.5 hover:bg-accent/20"
-                            aria-label={`Remove ${matchLabel(m)}`}
-                          >
-                            <X className="size-3" />
-                          </button>
-                        )}
-                      </span>
-                    ))}
-
-                    <button
-                      type="button"
-                      onClick={() => setEditingNoteId(editingNoteId === note.id ? null : note.id)}
-                      className="flex items-center gap-1 rounded-full border border-dashed px-3 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-foreground"
-                    >
-                      {editingNoteId === note.id ? (
-                        <>
-                          <Check size={12} /> Done
-                        </>
-                      ) : (
-                        <>
-                          <Pencil size={12} /> Edit matches
-                        </>
-                      )}
-                    </button>
-                  </div>
                 )}
+                <button
+                  type="button"
+                  onClick={() => deleteNote(note.id)}
+                  className="rounded p-1 text-muted-foreground hover:bg-accent/10 hover:text-foreground"
+                  aria-label="Remove note"
+                >
+                  <X className="size-4" />
+                </button>
               </div>
             ))}
           </div>

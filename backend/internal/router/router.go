@@ -12,6 +12,7 @@ import (
 func NewRouter(
 	scriptureHandler *handler.ScriptureHandler,
 	sessionHandler *handler.SessionHandler,
+	noteHandler *handler.NoteHandler,
 	userService *service.UserService,
 ) *chi.Mux {
 	r := chi.NewRouter()
@@ -40,6 +41,11 @@ func NewRouter(
 		protected.Get("/sessions/bookmarks", sessionHandler.Bookmarks)
 		protected.Patch("/sessions/{id}/bookmark", sessionHandler.ToggleBookmark)
 		protected.Delete("/sessions/{id}", sessionHandler.Delete)
+		protected.Post("/notes", noteHandler.Upload)
+		protected.Post("/notes/text", noteHandler.UploadText)
+		protected.Get("/notes", noteHandler.List)
+		protected.Get("/notes/{id}/download", noteHandler.DownloadURL)
+		protected.Delete("/notes/{id}", noteHandler.Delete)
 	})
 
 	return r
