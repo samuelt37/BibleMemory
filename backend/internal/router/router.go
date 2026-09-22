@@ -36,10 +36,9 @@ func NewRouter(
 	r.Get("/health", handler.Health)
 
 	// public routes
-	r.Get("/books", scriptureHandler.GetBooks)
+	RegisterScriptureRoutes(r, scriptureHandler)
 
 	// /check works for both logged-out and logged-in users;
-	// logged-in users additionally get their notes factored into grading
 	r.With(OptionalAuth(userService)).Post("/check", summaryHandler.CheckSummary)
 
 	// protected routes — require login

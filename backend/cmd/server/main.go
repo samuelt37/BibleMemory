@@ -62,7 +62,6 @@ func main() {
 	summaryHandler := handler.NewSummaryHandler(summaryService)
 
 	r := router.NewRouter(scriptureHandler, summaryHandler, sessionHandler, noteHandler, userService)
-	router.RegisterScriptureRoutes(r, scriptureHandler)
 
 	fmt.Println("Server running on :" + port)
 
