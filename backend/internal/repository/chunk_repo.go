@@ -45,3 +45,32 @@ func (r *NoteChunkRepository) ListByNote(noteID int) ([]model.NoteChunk, error) 
 	}
 	return chunks, rows.Err()
 }
+
+func (r *NoteChunkRepository) FindRelevant(userID, startBookID, endBookID int) ([]string, error) {
+	loBook, hiBook := startBookID, endBookID
+	if hiBook < loBook {
+		loBook, hiBook = hiBook, loBook
+	}
+
+	rows, err := r.db.Query(
+		`SELECT content FROM note_chunks
+		 WHERE user_id = $1 AND book_id BETWEEN $2 AND $3
+		 ORDER BY created_at DESC
+		 LIMIT 5`,
+		userID, loBook, hiBook,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var contents []string
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, err
+		}
+		contents = append(contents, c)
+	}
+	return contents, rows.Err()
+}

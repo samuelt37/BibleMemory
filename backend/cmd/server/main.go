@@ -41,9 +41,6 @@ func main() {
 	scriptureService := service.NewScriptureService(scriptureRepo)
 	scriptureHandler := handler.NewScriptureHandler(scriptureService)
 
-	summaryService := service.NewSummaryService(scriptureRepo)
-	summaryHandler := handler.NewSummaryHandler(summaryService)
-
 	userRepo := repository.NewUserRepository(db)
 	userService := service.NewUserService(userRepo)
 
@@ -61,9 +58,11 @@ func main() {
 	noteService := service.NewNoteService(noteRepo, noteChunkRepo, scriptureRepo, r2Client)
 	noteHandler := handler.NewNoteHandler(noteService)
 
-	r := router.NewRouter(scriptureHandler, sessionHandler, noteHandler, userService)
+	summaryService := service.NewSummaryService(scriptureRepo, noteChunkRepo)
+	summaryHandler := handler.NewSummaryHandler(summaryService)
+
+	r := router.NewRouter(scriptureHandler, summaryHandler, sessionHandler, noteHandler, userService)
 	router.RegisterScriptureRoutes(r, scriptureHandler)
-	router.RegisterSummaryRoutes(r, summaryHandler)
 
 	fmt.Println("Server running on :" + port)
 

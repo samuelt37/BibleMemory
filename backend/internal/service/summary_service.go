@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -15,18 +16,21 @@ import (
 )
 
 type SummaryService struct {
-	repo *repository.ScriptureRepository
+	repo      *repository.ScriptureRepository
+	chunkRepo *repository.NoteChunkRepository
 }
 
 func NewSummaryService(
 	repo *repository.ScriptureRepository,
+	chunkRepo *repository.NoteChunkRepository,
 ) *SummaryService {
 	return &SummaryService{
-		repo: repo,
+		repo:      repo,
+		chunkRepo: chunkRepo,
 	}
 }
 
-func (s *SummaryService) CheckSummary(req dto.SummaryRequest) ([]dto.SummaryResult, error) {
+func (s *SummaryService) CheckSummary(req dto.SummaryRequest, userID int) ([]dto.SummaryResult, error) {
 	if len(req.Answers) != len(req.Scripture.Ranges) {
 		return nil, fmt.Errorf("answers count (%d) does not match ranges count (%d)", len(req.Answers), len(req.Scripture.Ranges))
 	}
@@ -35,6 +39,8 @@ func (s *SummaryService) CheckSummary(req dto.SummaryRequest) ([]dto.SummaryResu
 	}
 
 	passages := make([]string, len(req.Scripture.Ranges))
+	notesContext := make([]string, len(req.Scripture.Ranges))
+
 	for i, rng := range req.Scripture.Ranges {
 		singleRangeQuery := dto.ScriptureQuery{
 			Translation: req.Scripture.Translation,
@@ -46,9 +52,27 @@ func (s *SummaryService) CheckSummary(req dto.SummaryRequest) ([]dto.SummaryResu
 			return nil, fmt.Errorf("failed to fetch range %d: %w", i, err)
 		}
 		passages[i] = concatVerses(verses)
+
+		if userID != 0 {
+			endBook := rng.Start.Book
+			if rng.End != nil {
+				endBook = rng.End.Book
+			}
+			chunks, err := s.chunkRepo.FindRelevant(userID, rng.Start.Book, endBook)
+			if err != nil {
+				log.Printf("CheckSummary: error finding notes for user %d (books %d-%d): %v", userID, rng.Start.Book, endBook, err)
+			} else {
+				log.Printf("CheckSummary: found %d note chunk(s) for user %d (books %d-%d)", len(chunks), userID, rng.Start.Book, endBook)
+				if len(chunks) > 0 {
+					notesContext[i] = strings.Join(chunks, "\n---\n")
+				}
+			}
+		} else {
+			log.Println("CheckSummary: userID is 0 (unauthenticated), skipping notes retrieval")
+		}
 	}
 
-	return s.gradeAllWithAI(req.Answers, passages)
+	return s.gradeAllWithAI(req.Answers, passages, notesContext)
 }
 
 func concatVerses(verses []model.VerseInfo) string {
@@ -62,7 +86,7 @@ func concatVerses(verses []model.VerseInfo) string {
 	return sb.String()
 }
 
-func (s *SummaryService) gradeAllWithAI(userAnswers, passages []string) ([]dto.SummaryResult, error) {
+func (s *SummaryService) gradeAllWithAI(userAnswers, passages, notesContext []string) ([]dto.SummaryResult, error) {
 	count := len(userAnswers)
 
 	var sb strings.Builder
@@ -70,14 +94,25 @@ func (s *SummaryService) gradeAllWithAI(userAnswers, passages []string) ([]dto.S
 	sb.WriteString("The user is NOT trying to recite the passage word-for-word — they are summarizing it in their own words.\n")
 	sb.WriteString("Judge whether their summary reflects an accurate understanding of the passage's main events, ideas, or teachings.\n")
 	sb.WriteString("Don't penalize different phrasing, paraphrasing, or omitted minor details — focus on whether the core meaning is correct.\n\n")
-	sb.WriteString("Rate each summary's accuracy from 1 to 10, where 10 means it fully and correctly captures the passage's key content,\n")
-	sb.WriteString("and 1 means it's missing or misrepresents the content entirely.\n\n")
+
+	sb.WriteString("Scoring guidelines:\n")
+	sb.WriteString("- Rate accuracy from 1 to 10 based strictly on how well the summary reflects the actual passage text.\n\n")
+
+	sb.WriteString("Feedback guidelines:\n")
+	sb.WriteString("- In the \"feedback\" field, provide 1-2 constructive sentences on their summary.\n")
+	sb.WriteString("- If \"User's own notes on this passage\" are present, YOU MUST explicitly reference them in the feedback (e.g., \"As you noted in your personal notes...\" or \"This ties directly into your application regarding...\").\n")
+	sb.WriteString("- If no notes are provided, base the feedback solely on the passage and summary.\n\n")
+
 	sb.WriteString(fmt.Sprintf("Respond ONLY with a valid JSON array of exactly %d elements matching the order of items below:\n", count))
 	sb.WriteString(`[{"accuracy": 8, "feedback": "..."}, {"accuracy": 9, "feedback": "..."}]` + "\n\n")
 	sb.WriteString("Items to evaluate:\n")
 
 	for i := 0; i < count; i++ {
-		sb.WriteString(fmt.Sprintf("--- Item %d ---\nPassage text: %s\nUser's summary: %s\n\n", i+1, passages[i], userAnswers[i]))
+		sb.WriteString(fmt.Sprintf("--- Item %d ---\nPassage text: %s\n", i+1, passages[i]))
+		if notesContext[i] != "" {
+			sb.WriteString(fmt.Sprintf("User's own notes on this passage: %s\n", notesContext[i]))
+		}
+		sb.WriteString(fmt.Sprintf("User's summary: %s\n\n", userAnswers[i]))
 	}
 
 	body := map[string]any{
@@ -105,13 +140,17 @@ func (s *SummaryService) gradeAllWithAI(userAnswers, passages []string) ([]dto.S
 		return nil, fmt.Errorf("API_KEY environment variable is not set on the server")
 	}
 
+	httpClient := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
 	primaryModel := os.Getenv("GEMINI_MODEL")
 	if primaryModel == "" {
 		primaryModel = "gemini-3.6-flash"
 	}
 
 	modelsToTry := []string{primaryModel}
-	for _, fallback := range []string{"gemini-3.5-flash", "gemini-3.7-flash"} {
+	for _, fallback := range []string{"gemini-flash-lite-latest", "gemini-3.5-flash-lite"} {
 		if fallback != primaryModel {
 			modelsToTry = append(modelsToTry, fallback)
 		}
@@ -119,9 +158,9 @@ func (s *SummaryService) gradeAllWithAI(userAnswers, passages []string) ([]dto.S
 
 	var lastErr error
 	for _, modelName := range modelsToTry {
-		for attempt := 0; attempt < 3; attempt++ {
+		for attempt := 0; attempt < 2; attempt++ {
 			if attempt > 0 {
-				time.Sleep(time.Duration(attempt*1500) * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 			}
 
 			url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", modelName)
@@ -133,18 +172,27 @@ func (s *SummaryService) gradeAllWithAI(userAnswers, passages []string) ([]dto.S
 			httpReq.Header.Set("Content-Type", "application/json")
 			httpReq.Header.Set("x-goog-api-key", apiKey)
 
-			resp, err := http.DefaultClient.Do(httpReq)
+			resp, err := httpClient.Do(httpReq)
 			if err != nil {
 				lastErr = err
 				continue
 			}
 
-			if resp.StatusCode == http.StatusServiceUnavailable || resp.StatusCode == http.StatusTooManyRequests {
+			if resp.StatusCode == http.StatusServiceUnavailable {
 				var errBody bytes.Buffer
 				errBody.ReadFrom(resp.Body)
 				resp.Body.Close()
-				lastErr = fmt.Errorf("Gemini API returned status %d for model %s: %s", resp.StatusCode, modelName, errBody.String())
-				continue
+				lastErr = fmt.Errorf("Gemini API returned status 503 (high demand) for model %s: %s", modelName, errBody.String())
+				// Overloaded model won't recover in 1s; failover to next model immediately
+				break
+			}
+
+			if resp.StatusCode == http.StatusTooManyRequests {
+				var errBody bytes.Buffer
+				errBody.ReadFrom(resp.Body)
+				resp.Body.Close()
+				lastErr = fmt.Errorf("Gemini API returned status 429 (rate limit) for model %s: %s", modelName, errBody.String())
+				break
 			}
 
 			if resp.StatusCode == http.StatusNotFound {

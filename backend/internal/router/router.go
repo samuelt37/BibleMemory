@@ -11,6 +11,7 @@ import (
 
 func NewRouter(
 	scriptureHandler *handler.ScriptureHandler,
+	summaryHandler *handler.SummaryHandler,
 	sessionHandler *handler.SessionHandler,
 	noteHandler *handler.NoteHandler,
 	userService *service.UserService,
@@ -34,6 +35,14 @@ func NewRouter(
 
 	r.Get("/health", handler.Health)
 
+	// public routes
+	r.Get("/books", scriptureHandler.GetBooks)
+
+	// /check works for both logged-out and logged-in users;
+	// logged-in users additionally get their notes factored into grading
+	r.With(OptionalAuth(userService)).Post("/check", summaryHandler.CheckSummary)
+
+	// protected routes — require login
 	r.Group(func(protected chi.Router) {
 		protected.Use(RequireAuth(userService))
 		protected.Post("/sessions", sessionHandler.Save)

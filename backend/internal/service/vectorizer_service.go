@@ -52,23 +52,33 @@ If the text isn't clearly about a specific passage, return all nulls.`,
 		},
 	})
 
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=%s", apiKey)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
+	models := []string{"gemini-3.6-flash", "gemini-flash-lite-latest"}
+	var bodyBytes []byte
+	var lastStatus int
+
+	for _, model := range models {
+		url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			continue
+		}
+		defer resp.Body.Close()
+
+		bodyBytes, _ = io.ReadAll(resp.Body)
+		lastStatus = resp.StatusCode
+		if resp.StatusCode == http.StatusOK {
+			break
+		}
 	}
-	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gemini API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	if lastStatus != http.StatusOK {
+		return nil, fmt.Errorf("gemini API returned status %d: %s", lastStatus, string(bodyBytes))
 	}
 
 	var result struct {

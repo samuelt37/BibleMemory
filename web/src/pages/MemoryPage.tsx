@@ -9,8 +9,8 @@ import type { BookRange, ScriptureRangeDTO } from "@/models/BookRange";
 import { bookRangeToDTO, isWholeChapterRange } from "@/models/BookRange";
 import type { BookInfo } from "@/models/BookInfo.ts";
 import { useMemorySession } from "@/context/MemorySessionContext";
-import { useDeleteSession, useSaveSession, useSessionHistory } from "@/hooks/useSessions";
-import { SignedOut, SignInButton, useUser } from "@clerk/clerk-react";
+import { useSaveSession, useSessionHistory } from "@/hooks/useSessions";
+import { SignedOut, SignInButton, useUser, useAuth } from "@clerk/clerk-react";
 import { BookOpen, Loader2 } from "lucide-react";
 
 type MemoryUnit =
@@ -60,9 +60,9 @@ export function MemoryPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, ChapterResult>>({});
   const { mutate: saveSession } = useSaveSession();
-  const { mutate: deleteSession } = useDeleteSession();
   const { data: history = [] } = useSessionHistory();
   const { isSignedIn } = useUser();
+  const { getToken } = useAuth();
 
   const [isChecking, setIsChecking] = useState(false);
 
@@ -109,11 +109,7 @@ export function MemoryPage() {
         const signature = rangesSignature(ranges);
         const duplicate = history.find((session) => sessionSignatureFromDTO(session.ranges) === signature);
 
-        if (duplicate) {
-          deleteSession(duplicate.id, {
-            onSuccess: () => saveSession(ranges.map(bookRangeToDTO)),
-          });
-        } else {
+        if (!duplicate) {
           saveSession(ranges.map(bookRangeToDTO));
         }
       }
@@ -140,9 +136,16 @@ export function MemoryPage() {
 
       const answersList = memoryUnits.map((u) => answers[u.key] ?? "");
 
+      const token = isSignedIn ? await getToken() : null;
+      console.log("[MemoryPage] isSignedIn:", isSignedIn, "hasToken:", !!token);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`${API_URL}/check`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           scripture: { translation: "KJV", ranges: scriptureRanges },
           answers: answersList,

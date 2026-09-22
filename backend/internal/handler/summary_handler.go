@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/samuelt37/BibleMemory/internal/auth"
 	"github.com/samuelt37/BibleMemory/internal/dto"
 	"github.com/samuelt37/BibleMemory/internal/service"
 )
@@ -35,7 +36,9 @@ func (h *SummaryHandler) CheckSummary(
 		return
 	}
 
-	results, err := h.service.CheckSummary(req)
+	userID, _ := auth.UserIDFromContext(r.Context())
+
+	results, err := h.service.CheckSummary(req, userID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("grading failed: %v", err), http.StatusInternalServerError)
 		return
