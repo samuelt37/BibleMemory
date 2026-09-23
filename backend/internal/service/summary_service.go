@@ -94,6 +94,8 @@ func (s *SummaryService) gradeAllWithAI(userAnswers, passages, notesContext []st
 	sb.WriteString("The user is NOT trying to recite the passage word-for-word — they are summarizing it in their own words.\n")
 	sb.WriteString("Judge whether their summary reflects an accurate understanding of the passage's main events, ideas, or teachings.\n")
 	sb.WriteString("Don't penalize different phrasing or paraphrasing — but DO penalize missing major events, people, or teachings.\n\n")
+	sb.WriteString("- If notes are provided but are irrelevant to the passage being evaluated, do not mention them in the feedback.\n")
+	sb.WriteString("- Irrelevant notes must never affect the score or bonus.\n")
 
 	sb.WriteString("Notes handling:\n")
 	sb.WriteString("- If no notes are provided for an item, treat the notes as completely absent.\n")
