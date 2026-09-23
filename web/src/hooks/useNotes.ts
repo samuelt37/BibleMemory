@@ -98,3 +98,20 @@ export async function fetchNoteDownloadURL(getToken: () => Promise<string | null
   const data = await res.json();
   return data.url;
 }
+
+export function useNote(noteId: number | null) {
+  const { getToken, isSignedIn } = useAuth();
+
+  return useQuery({
+    queryKey: ["notes", noteId],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch(`${API_URL}/notes/${noteId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch note");
+      return res.json();
+    },
+    enabled: noteId !== null && !!isSignedIn,
+  });
+}

@@ -133,3 +133,33 @@ func (h *NoteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 }
+
+func (h *NoteHandler) Get(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	noteID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	note, err := h.service.GetNote(userID, noteID)
+	if err != nil || note == nil {
+		http.Error(w, "note not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"id":         note.ID,
+		"filename":   note.Filename,
+		"sourceType": note.SourceType,
+		"rawText":    note.RawText,
+		"status":     note.Status,
+		"createdAt":  note.CreatedAt,
+	})
+}

@@ -10,6 +10,7 @@ import {
   fetchNoteDownloadURL,
 } from "@/hooks/useNotes";
 import { useAuth } from "@clerk/clerk-react";
+import { useNavigate } from "react-router-dom";
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -42,6 +43,8 @@ export function NotesPage() {
   const [pasteMode, setPasteMode] = useState(false);
   const [pasteTitle, setPasteTitle] = useState("");
   const [pasteText, setPasteText] = useState("");
+
+  const navigate = useNavigate();
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -126,7 +129,9 @@ export function NotesPage() {
             {notes.map((note) => (
               <div key={note.id} className="p-4 border rounded-lg bg-card text-card-foreground shadow-xs flex items-center gap-3">
                 <FileText size={20} className="text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => navigate(`/notes/${note.id}`)}
+                >
                   <p className="text-sm truncate">{note.filename}</p>
                   <p className="text-xs text-muted-foreground">
                     {note.sourceType === "file" && note.fileSize

@@ -151,7 +151,11 @@ export function Sidebar() {
         }`}
       >
         <div className="flex items-center justify-between p-2">
-          {open && <span className="px-2 font-semibold">BibleMemory</span>}
+          {open ? (
+            <Link to="/" className="px-2 font-semibold hover:opacity-80">
+              BibleMemory
+            </Link>
+          ) : null}
           <Button variant="ghost" size="icon" onClick={() => setOpen(!open)}>
             {open ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
           </Button>

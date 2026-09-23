@@ -54,6 +54,7 @@ func NewRouter(
 		protected.Get("/notes", noteHandler.List)
 		protected.Get("/notes/{id}/download", noteHandler.DownloadURL)
 		protected.Delete("/notes/{id}", noteHandler.Delete)
+		protected.Get("/notes/{id}", noteHandler.Get)
 	})
 
 	return r

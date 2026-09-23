@@ -92,3 +92,11 @@ func (r *NoteRepository) Delete(userID, noteID int) error {
 	_, err := r.db.Exec(`DELETE FROM notes WHERE id = $1 AND user_id = $2`, noteID, userID)
 	return err
 }
+
+func (r *NoteRepository) UpdateRawText(noteID int, text string) error {
+	_, err := r.db.Exec(
+		`UPDATE notes SET raw_text = $1, updated_at = now() WHERE id = $2`,
+		text, noteID,
+	)
+	return err
+}
