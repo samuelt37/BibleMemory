@@ -1,20 +1,24 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
-	"github.com/samuelt37/BibleMemory/internal/handler"
-	"github.com/samuelt37/BibleMemory/internal/service"
+	"github.com/samuelt37/BibleMemory/internal/notes"
+	"github.com/samuelt37/BibleMemory/internal/scripture"
+	"github.com/samuelt37/BibleMemory/internal/session"
+	"github.com/samuelt37/BibleMemory/internal/summary"
+	"github.com/samuelt37/BibleMemory/internal/user"
 )
 
 func NewRouter(
-	scriptureHandler *handler.ScriptureHandler,
-	summaryHandler *handler.SummaryHandler,
-	sessionHandler *handler.SessionHandler,
-	noteHandler *handler.NoteHandler,
-	userService *service.UserService,
+	scriptureHandler *scripture.Handler,
+	summaryHandler *summary.Handler,
+	sessionHandler *session.Handler,
+	noteHandler *notes.Handler,
+	userService *user.Service,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -33,10 +37,14 @@ func NewRouter(
 		w.Write([]byte(`{"message":"Bible Memory API is running","status":"ok"}`))
 	})
 
-	r.Get("/health", handler.Health)
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"status":"ok"}`)
+	})
 
 	// public routes
-	RegisterScriptureRoutes(r, scriptureHandler)
+	scriptureHandler.RegisterRoutes(r)
 
 	// /check works for both logged-out and logged-in users;
 	r.With(OptionalAuth(userService)).Post("/check", summaryHandler.CheckSummary)
@@ -44,17 +52,8 @@ func NewRouter(
 	// protected routes — require login
 	r.Group(func(protected chi.Router) {
 		protected.Use(RequireAuth(userService))
-		protected.Post("/sessions", sessionHandler.Save)
-		protected.Get("/sessions/history", sessionHandler.History)
-		protected.Get("/sessions/bookmarks", sessionHandler.Bookmarks)
-		protected.Patch("/sessions/{id}/bookmark", sessionHandler.ToggleBookmark)
-		protected.Delete("/sessions/{id}", sessionHandler.Delete)
-		protected.Post("/notes", noteHandler.Upload)
-		protected.Post("/notes/text", noteHandler.UploadText)
-		protected.Get("/notes", noteHandler.List)
-		protected.Get("/notes/{id}/download", noteHandler.DownloadURL)
-		protected.Delete("/notes/{id}", noteHandler.Delete)
-		protected.Get("/notes/{id}", noteHandler.Get)
+		sessionHandler.RegisterRoutes(protected)
+		noteHandler.RegisterRoutes(protected)
 	})
 
 	return r

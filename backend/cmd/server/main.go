@@ -8,11 +8,13 @@ import (
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/samuelt37/BibleMemory/internal/database"
-	"github.com/samuelt37/BibleMemory/internal/handler"
-	"github.com/samuelt37/BibleMemory/internal/repository"
+	"github.com/samuelt37/BibleMemory/internal/notes"
 	"github.com/samuelt37/BibleMemory/internal/router"
-	"github.com/samuelt37/BibleMemory/internal/service"
+	"github.com/samuelt37/BibleMemory/internal/scripture"
+	"github.com/samuelt37/BibleMemory/internal/session"
 	"github.com/samuelt37/BibleMemory/internal/storage"
+	"github.com/samuelt37/BibleMemory/internal/summary"
+	"github.com/samuelt37/BibleMemory/internal/user"
 )
 
 func main() {
@@ -37,29 +39,29 @@ func main() {
 
 	fmt.Println("Database connected")
 
-	scriptureRepo := repository.NewScriptureRepository(db)
-	scriptureService := service.NewScriptureService(scriptureRepo)
-	scriptureHandler := handler.NewScriptureHandler(scriptureService)
+	scriptureRepo := scripture.NewRepository(db)
+	scriptureService := scripture.NewService(scriptureRepo)
+	scriptureHandler := scripture.NewHandler(scriptureService)
 
-	userRepo := repository.NewUserRepository(db)
-	userService := service.NewUserService(userRepo)
+	userRepo := user.NewRepository(db)
+	userService := user.NewService(userRepo)
 
-	sessionRepo := repository.NewSessionRepository(db)
-	sessionService := service.NewSessionService(sessionRepo)
-	sessionHandler := handler.NewSessionHandler(sessionService)
+	sessionRepo := session.NewRepository(db)
+	sessionService := session.NewService(sessionRepo)
+	sessionHandler := session.NewHandler(sessionService)
 
 	r2Client, err := storage.NewR2Client(context.Background())
 	if err != nil {
 		panic(err)
 	}
 
-	noteRepo := repository.NewNoteRepository(db)
-	noteChunkRepo := repository.NewNoteChunkRepository(db)
-	noteService := service.NewNoteService(noteRepo, noteChunkRepo, scriptureRepo, r2Client)
-	noteHandler := handler.NewNoteHandler(noteService)
+	noteRepo := notes.NewRepository(db)
+	noteChunkRepo := notes.NewChunkRepository(db)
+	noteService := notes.NewService(noteRepo, noteChunkRepo, scriptureRepo, r2Client)
+	noteHandler := notes.NewHandler(noteService)
 
-	summaryService := service.NewSummaryService(scriptureRepo, noteChunkRepo)
-	summaryHandler := handler.NewSummaryHandler(summaryService)
+	summaryService := summary.NewService(scriptureRepo, noteChunkRepo)
+	summaryHandler := summary.NewHandler(summaryService)
 
 	r := router.NewRouter(scriptureHandler, summaryHandler, sessionHandler, noteHandler, userService)
 

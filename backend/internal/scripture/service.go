@@ -1,40 +1,29 @@
-package service
+package scripture
 
 import (
 	"errors"
 	"fmt"
-
-	"github.com/samuelt37/BibleMemory/internal/dto"
-	"github.com/samuelt37/BibleMemory/internal/model"
-	"github.com/samuelt37/BibleMemory/internal/repository"
 )
 
-type ScriptureService struct {
-	repo *repository.ScriptureRepository
+type Service struct {
+	repo *Repository
 }
 
-func NewScriptureService(
-	repo *repository.ScriptureRepository,
-) *ScriptureService {
-
-	return &ScriptureService{
+func NewService(repo *Repository) *Service {
+	return &Service{
 		repo: repo,
 	}
 }
 
-func (s *ScriptureService) GetBooks() ([]model.BookInfo, error) {
+func (s *Service) GetBooks() ([]BookInfo, error) {
 	return s.repo.GetBooks()
 }
 
-func (s *ScriptureService) GetChapters(
-	book string,
-) (int, error) {
+func (s *Service) GetChapters(book string) (int, error) {
 	return s.repo.GetChapters(book)
 }
 
-func (s *ScriptureService) GetScripture(
-	query dto.ScriptureQuery,
-) ([]model.VerseInfo, error) {
+func (s *Service) GetScripture(query Query) ([]VerseInfo, error) {
 	if len(query.Ranges) == 0 {
 		return nil, errors.New("Must have at least a book")
 	}
@@ -87,7 +76,7 @@ func (s *ScriptureService) GetScripture(
 	return s.repo.GetScripture(query)
 }
 
-func validateReference(ref dto.Reference) error {
+func validateReference(ref Reference) error {
 	if ref.Book <= 0 {
 		return errors.New("book is required")
 	}

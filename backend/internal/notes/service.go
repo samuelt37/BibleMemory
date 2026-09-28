@@ -1,4 +1,4 @@
-package service
+package notes
 
 import (
 	"bytes"
@@ -12,26 +12,25 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/samuelt37/BibleMemory/internal/model"
-	"github.com/samuelt37/BibleMemory/internal/repository"
+	"github.com/samuelt37/BibleMemory/internal/scripture"
 	"github.com/samuelt37/BibleMemory/internal/storage"
 )
 
-type NoteService struct {
-	repo          *repository.NoteRepository
-	chunkRepo     *repository.NoteChunkRepository
-	scriptureRepo *repository.ScriptureRepository
+type Service struct {
+	repo          *Repository
+	chunkRepo     *ChunkRepository
+	scriptureRepo *scripture.Repository
 	r2            *storage.R2Client
 
 	bookListCache   string
 	bookListCacheMu sync.Mutex
 }
 
-func NewNoteService(repo *repository.NoteRepository, chunkRepo *repository.NoteChunkRepository, scriptureRepo *repository.ScriptureRepository, r2 *storage.R2Client) *NoteService {
-	return &NoteService{repo: repo, chunkRepo: chunkRepo, scriptureRepo: scriptureRepo, r2: r2}
+func NewService(repo *Repository, chunkRepo *ChunkRepository, scriptureRepo *scripture.Repository, r2 *storage.R2Client) *Service {
+	return &Service{repo: repo, chunkRepo: chunkRepo, scriptureRepo: scriptureRepo, r2: r2}
 }
 
-func (s *NoteService) buildBookList() (string, error) {
+func (s *Service) buildBookList() (string, error) {
 	s.bookListCacheMu.Lock()
 	defer s.bookListCacheMu.Unlock()
 
@@ -53,7 +52,7 @@ func (s *NoteService) buildBookList() (string, error) {
 	return s.bookListCache, nil
 }
 
-func (s *NoteService) UploadNote(ctx context.Context, userID int, file multipart.File, header *multipart.FileHeader) (*model.Note, error) {
+func (s *Service) UploadNote(ctx context.Context, userID int, file multipart.File, header *multipart.FileHeader) (*Note, error) {
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
 		return nil, err
@@ -76,7 +75,7 @@ func (s *NoteService) UploadNote(ctx context.Context, userID int, file multipart
 	return note, nil
 }
 
-func (s *NoteService) extractAndProcess(ctx context.Context, userID, noteID int, fileBytes []byte, mimeType string) {
+func (s *Service) extractAndProcess(ctx context.Context, userID, noteID int, fileBytes []byte, mimeType string) {
 	log.Println("extractAndProcess: starting for note", noteID, "size:", len(fileBytes), "bytes")
 	text, err := extractTextFromFile(ctx, fileBytes, mimeType)
 	if err != nil {
@@ -96,7 +95,7 @@ func (s *NoteService) extractAndProcess(ctx context.Context, userID, noteID int,
 	}
 }
 
-func (s *NoteService) CreateTextNote(userID int, title, text string) (*model.Note, error) {
+func (s *Service) CreateTextNote(userID int, title, text string) (*Note, error) {
 	filename := title
 	if filename == "" {
 		filename = "Untitled note"
@@ -106,16 +105,16 @@ func (s *NoteService) CreateTextNote(userID int, title, text string) (*model.Not
 		return nil, err
 	}
 
-	go s.ProcessNote(context.Background(), userID, note.ID) // fire-and-forget, don't block the upload response
+	go s.ProcessNote(context.Background(), userID, note.ID)
 
 	return note, nil
 }
 
-func (s *NoteService) ListNotes(userID int) ([]model.Note, error) {
+func (s *Service) ListNotes(userID int) ([]Note, error) {
 	return s.repo.ListByUser(userID)
 }
 
-func (s *NoteService) GetDownloadURL(ctx context.Context, userID, noteID int) (string, error) {
+func (s *Service) GetDownloadURL(ctx context.Context, userID, noteID int) (string, error) {
 	note, err := s.repo.GetByID(userID, noteID)
 	if err != nil {
 		return "", err
@@ -126,7 +125,7 @@ func (s *NoteService) GetDownloadURL(ctx context.Context, userID, noteID int) (s
 	return s.r2.PresignedGetURL(ctx, *note.R2Key, 15*time.Minute)
 }
 
-func (s *NoteService) DeleteNote(ctx context.Context, userID, noteID int) error {
+func (s *Service) DeleteNote(ctx context.Context, userID, noteID int) error {
 	note, err := s.repo.GetByID(userID, noteID)
 	if err != nil {
 		return err
@@ -144,7 +143,7 @@ func (s *NoteService) DeleteNote(ctx context.Context, userID, noteID int) error 
 	return s.repo.Delete(userID, noteID)
 }
 
-func (s *NoteService) ProcessNote(ctx context.Context, userID, noteID int) error {
+func (s *Service) ProcessNote(ctx context.Context, userID, noteID int) error {
 	note, err := s.repo.GetByID(userID, noteID)
 	if err != nil || note == nil {
 		return fmt.Errorf("note not found")
@@ -171,7 +170,7 @@ func (s *NoteService) ProcessNote(ctx context.Context, userID, noteID int) error
 
 	results := make([]chunkResult, len(chunks))
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 4) // limit concurrency to 4 at a time, avoid hammering the API
+	sem := make(chan struct{}, 4)
 
 	for i, chunk := range chunks {
 		wg.Add(1)
@@ -212,6 +211,6 @@ func (s *NoteService) ProcessNote(ctx context.Context, userID, noteID int) error
 	return s.repo.UpdateStatus(noteID, "ready")
 }
 
-func (s *NoteService) GetNote(userID, noteID int) (*model.Note, error) {
+func (s *Service) GetNote(userID, noteID int) (*Note, error) {
 	return s.repo.GetByID(userID, noteID)
 }

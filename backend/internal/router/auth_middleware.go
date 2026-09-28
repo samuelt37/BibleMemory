@@ -6,10 +6,10 @@ import (
 
 	"github.com/clerk/clerk-sdk-go/v2/jwt"
 	"github.com/samuelt37/BibleMemory/internal/auth"
-	"github.com/samuelt37/BibleMemory/internal/service"
+	"github.com/samuelt37/BibleMemory/internal/user"
 )
 
-func RequireAuth(userService *service.UserService) func(http.Handler) http.Handler {
+func RequireAuth(userService *user.Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			sessionToken := extractBearerToken(r)
@@ -38,7 +38,7 @@ func RequireAuth(userService *service.UserService) func(http.Handler) http.Handl
 	}
 }
 
-func OptionalAuth(userService *service.UserService) func(http.Handler) http.Handler {
+func OptionalAuth(userService *user.Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := extractBearerToken(r)

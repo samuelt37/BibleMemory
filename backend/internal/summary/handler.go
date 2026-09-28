@@ -1,4 +1,4 @@
-package handler
+package summary
 
 import (
 	"encoding/json"
@@ -6,27 +6,20 @@ import (
 	"net/http"
 
 	"github.com/samuelt37/BibleMemory/internal/auth"
-	"github.com/samuelt37/BibleMemory/internal/dto"
-	"github.com/samuelt37/BibleMemory/internal/service"
 )
 
-type SummaryHandler struct {
-	service *service.SummaryService
+type Handler struct {
+	service *Service
 }
 
-func NewSummaryHandler(
-	service *service.SummaryService,
-) *SummaryHandler {
-	return &SummaryHandler{
+func NewHandler(service *Service) *Handler {
+	return &Handler{
 		service: service,
 	}
 }
 
-func (h *SummaryHandler) CheckSummary(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	var req dto.SummaryRequest
+func (h *Handler) CheckSummary(w http.ResponseWriter, r *http.Request) {
+	var req Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return

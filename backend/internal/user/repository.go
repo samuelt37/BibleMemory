@@ -1,20 +1,18 @@
-package repository
+package user
 
 import (
 	"database/sql"
-
-	"github.com/samuelt37/BibleMemory/internal/model"
 )
 
-type UserRepository struct {
+type Repository struct {
 	db *sql.DB
 }
 
-func NewUserRepository(db *sql.DB) *UserRepository {
-	return &UserRepository{db: db}
+func NewRepository(db *sql.DB) *Repository {
+	return &Repository{db: db}
 }
 
-func (r *UserRepository) InitTable() error {
+func (r *Repository) InitTable() error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS users (
 		id SERIAL PRIMARY KEY,
@@ -26,8 +24,8 @@ func (r *UserRepository) InitTable() error {
 	return err
 }
 
-func (r *UserRepository) GetByClerkID(clerkUserID string) (*model.User, error) {
-	var u model.User
+func (r *Repository) GetByClerkID(clerkUserID string) (*User, error) {
+	var u User
 	err := r.db.QueryRow(
 		`SELECT id, clerk_user_id FROM users WHERE clerk_user_id = $1`,
 		clerkUserID,
@@ -42,8 +40,8 @@ func (r *UserRepository) GetByClerkID(clerkUserID string) (*model.User, error) {
 	return &u, nil
 }
 
-func (r *UserRepository) Create(clerkUserID string) (*model.User, error) {
-	var u model.User
+func (r *Repository) Create(clerkUserID string) (*User, error) {
+	var u User
 	err := r.db.QueryRow(
 		`INSERT INTO users (clerk_user_id) VALUES ($1) RETURNING id, clerk_user_id`,
 		clerkUserID,

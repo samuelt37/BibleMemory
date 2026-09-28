@@ -1,27 +1,25 @@
-package repository
+package session
 
 import (
 	"database/sql"
 	"encoding/json"
-
-	"github.com/samuelt37/BibleMemory/internal/model"
 )
 
-type SessionRepository struct {
+type Repository struct {
 	db *sql.DB
 }
 
-func NewSessionRepository(db *sql.DB) *SessionRepository {
-	return &SessionRepository{db: db}
+func NewRepository(db *sql.DB) *Repository {
+	return &Repository{db: db}
 }
 
-func (r *SessionRepository) Create(userID int, ranges []model.ScriptureRange, bookmarked bool) (*model.MemorySession, error) {
+func (r *Repository) Create(userID int, ranges []ScriptureRange, bookmarked bool) (*Session, error) {
 	rangesJSON, err := json.Marshal(ranges)
 	if err != nil {
 		return nil, err
 	}
 
-	var s model.MemorySession
+	var s Session
 	var rawRanges []byte
 	err = r.db.QueryRow(
 		`INSERT INTO memory_sessions (user_id, ranges, bookmarked)
@@ -39,7 +37,7 @@ func (r *SessionRepository) Create(userID int, ranges []model.ScriptureRange, bo
 	return &s, nil
 }
 
-func (r *SessionRepository) ListHistory(userID int, limit int) ([]model.MemorySession, error) {
+func (r *Repository) ListHistory(userID int, limit int) ([]Session, error) {
 	rows, err := r.db.Query(
 		`SELECT id, user_id, ranges, bookmarked, created_at
 		 FROM memory_sessions
@@ -55,7 +53,7 @@ func (r *SessionRepository) ListHistory(userID int, limit int) ([]model.MemorySe
 	return scanSessions(rows)
 }
 
-func (r *SessionRepository) ListBookmarked(userID int) ([]model.MemorySession, error) {
+func (r *Repository) ListBookmarked(userID int) ([]Session, error) {
 	rows, err := r.db.Query(
 		`SELECT id, user_id, ranges, bookmarked, created_at
 		 FROM memory_sessions
@@ -70,7 +68,7 @@ func (r *SessionRepository) ListBookmarked(userID int) ([]model.MemorySession, e
 	return scanSessions(rows)
 }
 
-func (r *SessionRepository) SetBookmarked(userID int, sessionID int, bookmarked bool) error {
+func (r *Repository) SetBookmarked(userID int, sessionID int, bookmarked bool) error {
 	_, err := r.db.Exec(
 		`UPDATE memory_sessions SET bookmarked = $1 WHERE id = $2 AND user_id = $3`,
 		bookmarked, sessionID, userID,
@@ -78,7 +76,7 @@ func (r *SessionRepository) SetBookmarked(userID int, sessionID int, bookmarked 
 	return err
 }
 
-func (r *SessionRepository) Delete(userID int, sessionID int) error {
+func (r *Repository) Delete(userID int, sessionID int) error {
 	_, err := r.db.Exec(
 		`DELETE FROM memory_sessions WHERE id = $1 AND user_id = $2`,
 		sessionID, userID,
@@ -86,10 +84,10 @@ func (r *SessionRepository) Delete(userID int, sessionID int) error {
 	return err
 }
 
-func scanSessions(rows *sql.Rows) ([]model.MemorySession, error) {
-	var out []model.MemorySession
+func scanSessions(rows *sql.Rows) ([]Session, error) {
+	var out []Session
 	for rows.Next() {
-		var s model.MemorySession
+		var s Session
 		var rawRanges []byte
 		if err := rows.Scan(&s.ID, &s.UserID, &rawRanges, &s.Bookmarked, &s.CreatedAt); err != nil {
 			return nil, err

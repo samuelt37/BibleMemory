@@ -1,4 +1,4 @@
-package handler
+package session
 
 import (
 	"encoding/json"
@@ -7,19 +7,25 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/samuelt37/BibleMemory/internal/auth"
-	"github.com/samuelt37/BibleMemory/internal/model"
-	"github.com/samuelt37/BibleMemory/internal/service"
 )
 
-type SessionHandler struct {
-	service *service.SessionService
+type Handler struct {
+	service *Service
 }
 
-func NewSessionHandler(s *service.SessionService) *SessionHandler {
-	return &SessionHandler{service: s}
+func NewHandler(s *Service) *Handler {
+	return &Handler{service: s}
 }
 
-func (h *SessionHandler) Save(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) RegisterRoutes(r chi.Router) {
+	r.Post("/sessions", h.Save)
+	r.Get("/sessions/history", h.History)
+	r.Get("/sessions/bookmarks", h.Bookmarks)
+	r.Patch("/sessions/{id}/bookmark", h.ToggleBookmark)
+	r.Delete("/sessions/{id}", h.Delete)
+}
+
+func (h *Handler) Save(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -27,7 +33,7 @@ func (h *SessionHandler) Save(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Ranges []model.ScriptureRange `json:"ranges"`
+		Ranges []ScriptureRange `json:"ranges"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
@@ -44,7 +50,7 @@ func (h *SessionHandler) Save(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(saved)
 }
 
-func (h *SessionHandler) History(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -59,7 +65,7 @@ func (h *SessionHandler) History(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(sessions)
 }
 
-func (h *SessionHandler) Bookmarks(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Bookmarks(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -74,7 +80,7 @@ func (h *SessionHandler) Bookmarks(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(sessions)
 }
 
-func (h *SessionHandler) ToggleBookmark(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ToggleBookmark(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -99,7 +105,7 @@ func (h *SessionHandler) ToggleBookmark(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *SessionHandler) Delete(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)

@@ -1,4 +1,4 @@
-package model
+package session
 
 import "time"
 
@@ -11,10 +11,12 @@ type ScriptureRange struct {
 	EndVerse     *int `json:"endVerse"`
 }
 
-type MemorySession struct {
+type Session struct {
 	ID         int              `json:"id"`
 	UserID     int              `json:"-"`
 	Ranges     []ScriptureRange `json:"ranges"`
 	Bookmarked bool             `json:"bookmarked"`
 	CreatedAt  time.Time        `json:"createdAt"`
 }
+
+type MemorySession = Session

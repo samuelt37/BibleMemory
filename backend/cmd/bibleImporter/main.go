@@ -11,7 +11,7 @@ import (
 	clerk "github.com/clerk/clerk-sdk-go/v2"
 	"github.com/samuelt37/BibleMemory/internal/database"
 	"github.com/samuelt37/BibleMemory/internal/importer"
-	"github.com/samuelt37/BibleMemory/internal/model"
+	"github.com/samuelt37/BibleMemory/internal/scripture"
 )
 
 func main() {
@@ -93,7 +93,7 @@ func main() {
 			testament = "New"
 		}
 
-		var records []model.VerseRecord
+		var records []scripture.VerseRecord
 		for _, chapter := range book.Chapters {
 			chapterNum, err := strconv.Atoi(chapter.Chapter)
 			if err != nil {
@@ -106,7 +106,7 @@ func main() {
 					panic(err)
 				}
 
-				records = append(records, model.VerseRecord{
+				records = append(records, scripture.VerseRecord{
 					Translation: "KJV",
 					Testament:   testament,
 					BookOrder:   bookNum,

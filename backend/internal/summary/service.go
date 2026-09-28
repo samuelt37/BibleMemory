@@ -1,4 +1,4 @@
-package service
+package summary
 
 import (
 	"bytes"
@@ -10,41 +10,40 @@ import (
 	"strings"
 	"time"
 
-	"github.com/samuelt37/BibleMemory/internal/dto"
-	"github.com/samuelt37/BibleMemory/internal/model"
-	"github.com/samuelt37/BibleMemory/internal/repository"
+	"github.com/samuelt37/BibleMemory/internal/notes"
+	"github.com/samuelt37/BibleMemory/internal/scripture"
 )
 
-type SummaryService struct {
-	repo      *repository.ScriptureRepository
-	chunkRepo *repository.NoteChunkRepository
+type Service struct {
+	repo      *scripture.Repository
+	chunkRepo *notes.ChunkRepository
 }
 
-func NewSummaryService(
-	repo *repository.ScriptureRepository,
-	chunkRepo *repository.NoteChunkRepository,
-) *SummaryService {
-	return &SummaryService{
+func NewService(
+	repo *scripture.Repository,
+	chunkRepo *notes.ChunkRepository,
+) *Service {
+	return &Service{
 		repo:      repo,
 		chunkRepo: chunkRepo,
 	}
 }
 
-func (s *SummaryService) CheckSummary(req dto.SummaryRequest, userID int) ([]dto.SummaryResult, error) {
+func (s *Service) CheckSummary(req Request, userID int) ([]Result, error) {
 	if len(req.Answers) != len(req.Scripture.Ranges) {
 		return nil, fmt.Errorf("answers count (%d) does not match ranges count (%d)", len(req.Answers), len(req.Scripture.Ranges))
 	}
 	if len(req.Scripture.Ranges) == 0 {
-		return []dto.SummaryResult{}, nil
+		return []Result{}, nil
 	}
 
 	passages := make([]string, len(req.Scripture.Ranges))
 	notesContext := make([]string, len(req.Scripture.Ranges))
 
 	for i, rng := range req.Scripture.Ranges {
-		singleRangeQuery := dto.ScriptureQuery{
+		singleRangeQuery := scripture.Query{
 			Translation: req.Scripture.Translation,
-			Ranges:      []dto.ScriptureRange{rng},
+			Ranges:      []scripture.Range{rng},
 		}
 
 		verses, err := s.repo.GetScripture(singleRangeQuery)
@@ -75,7 +74,7 @@ func (s *SummaryService) CheckSummary(req dto.SummaryRequest, userID int) ([]dto
 	return s.gradeAllWithAI(req.Answers, passages, notesContext)
 }
 
-func concatVerses(verses []model.VerseInfo) string {
+func concatVerses(verses []scripture.VerseInfo) string {
 	var sb strings.Builder
 	for i, v := range verses {
 		if i > 0 {
@@ -86,7 +85,7 @@ func concatVerses(verses []model.VerseInfo) string {
 	return sb.String()
 }
 
-func (s *SummaryService) gradeAllWithAI(userAnswers, passages, notesContext []string) ([]dto.SummaryResult, error) {
+func (s *Service) gradeAllWithAI(userAnswers, passages, notesContext []string) ([]Result, error) {
 	count := len(userAnswers)
 
 	var sb strings.Builder
@@ -222,7 +221,6 @@ func (s *SummaryService) gradeAllWithAI(userAnswers, passages, notesContext []st
 				errBody.ReadFrom(resp.Body)
 				resp.Body.Close()
 				lastErr = fmt.Errorf("Gemini API returned status 503 (high demand) for model %s: %s", modelName, errBody.String())
-				// Overloaded model won't recover in 1s; failover to next model immediately
 				break
 			}
 
@@ -268,18 +266,18 @@ func (s *SummaryService) gradeAllWithAI(userAnswers, passages, notesContext []st
 			}
 
 			rawText := strings.TrimSpace(apiResp.Candidates[0].Content.Parts[0].Text)
-			var results []dto.SummaryResult
+			var results []Result
 			if err := json.Unmarshal([]byte(rawText), &results); err != nil {
-				var single dto.SummaryResult
+				var single Result
 				if err2 := json.Unmarshal([]byte(rawText), &single); err2 == nil {
-					results = []dto.SummaryResult{single}
+					results = []Result{single}
 				} else {
 					return nil, fmt.Errorf("failed to parse Gemini response: %w (raw: %s)", err, rawText)
 				}
 			}
 
 			for len(results) < count {
-				results = append(results, dto.SummaryResult{
+				results = append(results, Result{
 					Accuracy: 5,
 					Feedback: "Passage evaluated.",
 				})

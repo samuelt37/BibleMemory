@@ -1,25 +1,22 @@
-package repository
+package scripture
 
 import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/samuelt37/BibleMemory/internal/dto"
-	"github.com/samuelt37/BibleMemory/internal/model"
 )
 
-type ScriptureRepository struct {
+type Repository struct {
 	db *sql.DB
 }
 
-func NewScriptureRepository(db *sql.DB) *ScriptureRepository {
-	return &ScriptureRepository{
+func NewRepository(db *sql.DB) *Repository {
+	return &Repository{
 		db: db,
 	}
 }
 
-func (r *ScriptureRepository) GetBooks() ([]model.BookInfo, error) {
+func (r *Repository) GetBooks() ([]BookInfo, error) {
 	query := `
 		SELECT MIN(book_order) AS id, book, MAX(chapter) AS chapters
 		FROM bible_verses
@@ -33,15 +30,13 @@ func (r *ScriptureRepository) GetBooks() ([]model.BookInfo, error) {
 	}
 	defer rows.Close()
 
-	var books []model.BookInfo
+	var books []BookInfo
 
 	for rows.Next() {
-		var b model.BookInfo
-
+		var b BookInfo
 		if err := rows.Scan(&b.ID, &b.Book, &b.Chapters); err != nil {
 			return nil, err
 		}
-
 		books = append(books, b)
 	}
 	if err := rows.Err(); err != nil {
@@ -51,9 +46,7 @@ func (r *ScriptureRepository) GetBooks() ([]model.BookInfo, error) {
 	return books, nil
 }
 
-func (r *ScriptureRepository) GetChapters(
-	book string,
-) (int, error) {
+func (r *Repository) GetChapters(book string) (int, error) {
 	query := `
 		SELECT COUNT(DISTINCT chapter)
 		FROM bible_verses
@@ -70,10 +63,7 @@ func (r *ScriptureRepository) GetChapters(
 	return count, nil
 }
 
-func (r *ScriptureRepository) GetScripture(
-	queryParams dto.ScriptureQuery,
-) ([]model.VerseInfo, error) {
-
+func (r *Repository) GetScripture(queryParams Query) ([]VerseInfo, error) {
 	query := `
 		SELECT book, chapter, verse, text
 		FROM bible_verses
@@ -103,25 +93,21 @@ func (r *ScriptureRepository) GetScripture(
 	if err != nil {
 		return nil, err
 	}
-
 	defer rows.Close()
 
-	var verses []model.VerseInfo
+	var verses []VerseInfo
 
 	for rows.Next() {
-		var verse model.VerseInfo
-
+		var verse VerseInfo
 		err := rows.Scan(
 			&verse.Book,
 			&verse.Chapter,
 			&verse.Verse,
 			&verse.Text,
 		)
-
 		if err != nil {
 			return nil, err
 		}
-
 		verses = append(verses, verse)
 	}
 	if err := rows.Err(); err != nil {
@@ -132,12 +118,11 @@ func (r *ScriptureRepository) GetScripture(
 }
 
 func buildRangeCondition(
-	start dto.Reference,
-	end dto.Reference,
+	start Reference,
+	end Reference,
 	paramCount *int,
 	args *[]interface{},
 ) string {
-
 	startSQL := buildStartCondition(start, paramCount, args)
 	endSQL := buildEndCondition(end, paramCount, args)
 
@@ -149,11 +134,10 @@ func buildRangeCondition(
 }
 
 func buildStartCondition(
-	ref dto.Reference,
+	ref Reference,
 	paramCount *int,
 	args *[]interface{},
 ) string {
-
 	*paramCount++
 	bookParam := *paramCount
 	*args = append(*args, ref.Book)
@@ -210,11 +194,10 @@ func buildStartCondition(
 }
 
 func buildEndCondition(
-	ref dto.Reference,
+	ref Reference,
 	paramCount *int,
 	args *[]interface{},
 ) string {
-
 	*paramCount++
 	bookParam := *paramCount
 	*args = append(*args, ref.Book)

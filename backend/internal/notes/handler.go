@@ -1,4 +1,4 @@
-package handler
+package notes
 
 import (
 	"encoding/json"
@@ -7,18 +7,26 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/samuelt37/BibleMemory/internal/auth"
-	"github.com/samuelt37/BibleMemory/internal/service"
 )
 
-type NoteHandler struct {
-	service *service.NoteService
+type Handler struct {
+	service *Service
 }
 
-func NewNoteHandler(s *service.NoteService) *NoteHandler {
-	return &NoteHandler{service: s}
+func NewHandler(s *Service) *Handler {
+	return &Handler{service: s}
 }
 
-func (h *NoteHandler) Upload(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) RegisterRoutes(r chi.Router) {
+	r.Post("/notes", h.Upload)
+	r.Post("/notes/text", h.UploadText)
+	r.Get("/notes", h.List)
+	r.Get("/notes/{id}/download", h.DownloadURL)
+	r.Delete("/notes/{id}", h.Delete)
+	r.Get("/notes/{id}", h.Get)
+}
+
+func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -47,7 +55,7 @@ func (h *NoteHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(note)
 }
 
-func (h *NoteHandler) UploadText(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UploadText(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -73,24 +81,24 @@ func (h *NoteHandler) UploadText(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(note)
 }
 
-func (h *NoteHandler) List(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	notes, err := h.service.ListNotes(userID)
+	notesList, err := h.service.ListNotes(userID)
 	if err != nil {
 		http.Error(w, "failed to fetch notes", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(notes)
+	json.NewEncoder(w).Encode(notesList)
 }
 
-func (h *NoteHandler) DownloadURL(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DownloadURL(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -113,7 +121,7 @@ func (h *NoteHandler) DownloadURL(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"url": url})
 }
 
-func (h *NoteHandler) Delete(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -134,7 +142,7 @@ func (h *NoteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *NoteHandler) Get(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
