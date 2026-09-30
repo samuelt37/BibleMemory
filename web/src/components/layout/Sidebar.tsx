@@ -1,15 +1,38 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown, LogIn, History, Bookmark, X, Upload } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  LogIn,
+  History,
+  Bookmark,
+  X,
+  Upload,
+} from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
+import {
+  SignedIn,
+  SignedOut,
+  SignInButton,
+  UserButton,
+} from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useMemorySession } from "@/context/MemorySessionContext";
 import { useBooks } from "@/hooks/Books";
 import type { BookRange, ScriptureRangeDTO } from "@/models/BookRange";
 import type { BookInfo } from "@/models/BookInfo";
 import type { MemorySession } from "@/models/Session";
-import { useDeleteSession, useSessionBookmarks, useSessionHistory } from "@/hooks/useSessions";
+import {
+  useDeleteSession,
+  useSessionBookmarks,
+  useSessionHistory,
+} from "@/hooks/useSessions";
 
 function sessionLabel(session: MemorySession, books: BookInfo[]): string {
   return session.ranges
@@ -74,29 +97,34 @@ function DropdownSection({
       {open && (
         <div className="ml-2 flex flex-col border-l pl-3">
           {safeItems.length === 0 ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">Nothing yet</p>
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">
+              Nothing yet
+            </p>
           ) : (
             safeItems.map((item) => (
-             <div key={item.id} className="group flex items-center gap-1 rounded-md hover:bg-muted">
-              <button
-                type="button"
-                onClick={() => onSelect(item)}
-                className="flex-1 truncate px-2 py-1.5 text-left text-sm"
+              <div
+                key={item.id}
+                className="group flex items-center gap-1 rounded-md hover:bg-muted"
               >
-                {sessionLabel(item, books)}
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(item);
-                }}
-                className="mr-1 rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent/20 hover:text-foreground"
-                aria-label="Delete"
-              >
-                <X size={14} />
-              </button>
-             </div>
+                <button
+                  type="button"
+                  onClick={() => onSelect(item)}
+                  className="flex-1 truncate px-2 py-1.5 text-left text-sm"
+                >
+                  {sessionLabel(item, books)}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(item);
+                  }}
+                  className="mr-1 rounded p-1 text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent/20 hover:text-foreground"
+                  aria-label="Delete"
+                >
+                  <X size={14} />
+                </button>
+              </div>
             ))
           )}
         </div>
@@ -126,13 +154,25 @@ export function Sidebar() {
     const endBook = books.find((b) => b.id === dto.endBookId);
     return {
       id,
-      start: { book: startBook?.book ?? "", bookId: dto.startBookId, chapter: dto.startChapter, verse: dto.startVerse },
-      end: { book: endBook?.book ?? "", bookId: dto.endBookId, chapter: dto.endChapter, verse: dto.endVerse },
+      start: {
+        book: startBook?.book ?? "",
+        bookId: dto.startBookId,
+        chapter: dto.startChapter,
+        verse: dto.startVerse,
+      },
+      end: {
+        book: endBook?.book ?? "",
+        bookId: dto.endBookId,
+        chapter: dto.endChapter,
+        verse: dto.endVerse,
+      },
     };
   }
 
   const handleSelect = (session: MemorySession) => {
-    const bookRanges = session.ranges.map((dto, i) => dtoToBookRange(dto, i + 1));
+    const bookRanges = session.ranges.map((dto, i) =>
+      dtoToBookRange(dto, i + 1),
+    );
     loadRanges(bookRanges);
     if (location.pathname !== "/") {
       navigate("/");
@@ -217,7 +257,10 @@ export function Sidebar() {
         <div className="border-t px-2 h-14 flex items-center">
           <SignedOut>
             <SignInButton mode="modal">
-              <Button variant="ghost" className="w-full justify-start gap-3 px-3">
+              <Button
+                variant="ghost"
+                className="w-full justify-start gap-3 px-3"
+              >
                 <LogIn size={18} className="shrink-0" />
                 {open && <span>Log in</span>}
               </Button>

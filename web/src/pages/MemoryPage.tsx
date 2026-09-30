@@ -6,7 +6,7 @@ import { useBooks } from "@/hooks/Books.ts";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/constants/config";
 import type { BookRange, ScriptureRangeDTO } from "@/models/BookRange";
-import { bookRangeToDTO, isWholeChapterRange } from "@/models/BookRange";
+import { bookRangeToDTO } from "@/models/BookRange";
 import type { BookInfo } from "@/models/BookInfo.ts";
 import { useMemorySession } from "@/context/MemorySessionContext";
 import { useSaveSession, useSessionHistory } from "@/hooks/useSessions";
@@ -21,34 +21,34 @@ type ChapterResult = { accuracy: number; feedback: string };
 
 function buildMemoryUnits(ranges: BookRange[]): MemoryUnit[] {
   const units: MemoryUnit[] = [];
-  const seen = new Set<string>();
+  // const seen = new Set<string>();
 
   for (const r of ranges) {
-    if (isWholeChapterRange(r)) {
-      for (let ch = r.start.chapter; ch <= r.end.chapter; ch++) {
-        const key = `${r.start.bookId}-${ch}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        units.push({
-          kind: "chapter",
-          key,
-          book: r.start.book,
-          bookId: r.start.bookId,
-          chapter: ch,
-          label: `${r.start.book} — Chapter ${ch}`,
-        });
-      }
-    } else {
-      const pos = (p: BookRange["start"]) =>
-        `${p.book} ${p.chapter}${p.verse !== null ? `:${p.verse}` : ""}`;
-      units.push({
-        kind: "range",
-        key: `range-${r.id}`,
-        label: `${pos(r.start)} \u2013 ${pos(r.end)}`,
-        range: r,
-      });
-    }
+    // if (isWholeChapterRange(r)) {
+    //   for (let ch = r.start.chapter; ch <= r.end.chapter; ch++) {
+    //     const key = `${r.start.bookId}-${ch}`;
+    //     if (seen.has(key)) continue;
+    //     seen.add(key);
+    //     units.push({
+    //       kind: "chapter",
+    //       key,
+    //       book: r.start.book,
+    //       bookId: r.start.bookId,
+    //       chapter: ch,
+    //       label: `${r.start.book} — Chapter ${ch}`,
+    //     });
+    //   }
+    // } else {
+    const pos = (p: BookRange["start"]) =>
+      `${p.book} ${p.chapter}${p.verse !== null ? `:${p.verse}` : ""}`;
+    units.push({
+      kind: "range",
+      key: `range-${r.id}`,
+      label: `${pos(r.start)} \u2013 ${pos(r.end)}`,
+      range: r,
+    });
   }
+  // }
 
   return units;
 }
