@@ -45,7 +45,7 @@ export function bookRangeToDTO(r: BookRange): ScriptureRangeDTO {
   };
 }
 
-export type MemorySession = {
+export type ReviewSession = {
   id: number;
   ranges: ScriptureRangeDTO[];
   bookmarked: boolean;

@@ -32,10 +32,10 @@ import {
   type BookRange,
   type ScriptureRangeDTO,
   type BookInfo,
-  type MemorySession,
+  type ReviewSession,
 } from "@/features/review";
 
-function sessionLabel(session: MemorySession, books: BookInfo[]): string {
+function sessionLabel(session: ReviewSession, books: BookInfo[]): string {
   return session.ranges
     .map((dto) => {
       const book = books.find((b) => b.id === dto.startBookId)?.book ?? "";
@@ -59,13 +59,13 @@ function DropdownSection({
 }: {
   label: string;
   icon: React.ReactNode;
-  items: MemorySession[];
+  items: ReviewSession[];
   books: BookInfo[];
   open: boolean;
   sidebarOpen: boolean;
   onToggle: () => void;
-  onSelect: (item: MemorySession) => void;
-  onDelete: (item: MemorySession) => void;
+  onSelect: (item: ReviewSession) => void;
+  onDelete: (item: ReviewSession) => void;
 }) {
   const safeItems = items ?? [];
   if (!sidebarOpen) {
@@ -170,7 +170,7 @@ export function Sidebar() {
     };
   }
 
-  const handleSelect = (session: MemorySession) => {
+  const handleSelect = (session: ReviewSession) => {
     const bookRanges = session.ranges.map((dto, i) =>
       dtoToBookRange(dto, i + 1),
     );
@@ -180,7 +180,7 @@ export function Sidebar() {
     }
   };
 
-  const handleDelete = (session: MemorySession) => {
+  const handleDelete = (session: ReviewSession) => {
     deleteSession(session.id);
   };
 
@@ -194,7 +194,7 @@ export function Sidebar() {
         <div className="flex items-center justify-between p-2">
           {open ? (
             <Link to="/" className="px-2 font-semibold hover:opacity-80">
-              BibleMemory
+              BibleReview
             </Link>
           ) : null}
           <Button variant="ghost" size="icon" onClick={() => setOpen(!open)}>

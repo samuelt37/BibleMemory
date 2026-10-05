@@ -24,7 +24,7 @@ type ReviewUnit =
 
 type ChapterResult = { accuracy: number; feedback: string };
 
-function buildMemoryUnits(ranges: BookRange[]): ReviewUnit[] {
+function buildReviewUnits(ranges: BookRange[]): ReviewUnit[] {
   const units: ReviewUnit[] = [];
   // const seen = new Set<string>();
 
@@ -97,7 +97,7 @@ export function ReviewPage() {
     ]);
   };
 
-  const memoryUnits = buildMemoryUnits(ranges);
+  const reviewUnits = buildReviewUnits(ranges);
 
   function rangesSignature(ranges: BookRange[]): string {
     return ranges
@@ -133,7 +133,7 @@ export function ReviewPage() {
         }
       }
 
-      const scriptureRanges = memoryUnits.map((u) =>
+      const scriptureRanges = reviewUnits.map((u) =>
         u.kind === "chapter"
           ? {
               start: { book: u.bookId, chapter: u.chapter, verse: null },
@@ -153,10 +153,10 @@ export function ReviewPage() {
             },
       );
 
-      const answersList = memoryUnits.map((u) => answers[u.key] ?? "");
+      const answersList = reviewUnits.map((u) => answers[u.key] ?? "");
 
       const token = isSignedIn ? await getToken() : null;
-      console.log("[MemoryPage] isSignedIn:", isSignedIn, "hasToken:", !!token);
+      console.log("[ReviewPage] isSignedIn:", isSignedIn, "hasToken:", !!token);
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
@@ -181,7 +181,7 @@ export function ReviewPage() {
       const resultsList: ChapterResult[] = await res.json();
 
       const resultsByUnit: Record<string, ChapterResult> = {};
-      memoryUnits.forEach((u, i) => {
+      reviewUnits.forEach((u, i) => {
         resultsByUnit[u.key] = resultsList[i];
       });
 
@@ -257,7 +257,7 @@ export function ReviewPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {memoryUnits.map((u) => (
+            {reviewUnits.map((u) => (
               <ReviewCard
                 key={u.key}
                 sectionTitle={u.label}

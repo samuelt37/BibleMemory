@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/clerk-react";
 import { API_URL } from "@/constants/config";
-import type { ScriptureRangeDTO, MemorySession } from "../types";
+import type { ScriptureRangeDTO, ReviewSession } from "../types";
 
 export function useSessionHistory() {
   const { getToken, isSignedIn } = useAuth();
@@ -14,7 +14,7 @@ export function useSessionHistory() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to fetch history");
-      return res.json() as Promise<MemorySession[]>;
+      return res.json() as Promise<ReviewSession[]>;
     },
     enabled: !!isSignedIn,
   });
@@ -31,7 +31,7 @@ export function useSessionBookmarks() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to fetch bookmarks");
-      return res.json() as Promise<MemorySession[]>;
+      return res.json() as Promise<ReviewSession[]>;
     },
     enabled: !!isSignedIn,
   });
@@ -50,7 +50,7 @@ export function useSaveSession() {
         body: JSON.stringify({ ranges }),
       });
       if (!res.ok) throw new Error("Failed to save session");
-      return res.json() as Promise<MemorySession>;
+      return res.json() as Promise<ReviewSession>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sessions", "history"] });

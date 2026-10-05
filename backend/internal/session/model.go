@@ -19,4 +19,4 @@ type Session struct {
 	CreatedAt  time.Time        `json:"createdAt"`
 }
 
-type MemorySession = Session
+type ReviewSession = Session
