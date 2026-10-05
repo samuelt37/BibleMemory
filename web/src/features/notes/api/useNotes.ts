@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/clerk-react";
 import { API_URL } from "@/constants/config";
-import type { Note } from "@/models/Note";
+import type { Note } from "../types";
 
 export function useNotesList() {
   const { getToken, isSignedIn } = useAuth();
@@ -20,7 +20,7 @@ export function useNotesList() {
     refetchInterval: (query) => {
       const notes = query.state.data ?? [];
       const stillProcessing = notes.some((n) => n.status === "processing");
-      return stillProcessing ? 3000 : false; // poll every 3s while anything's processing, stop once all settled
+      return stillProcessing ? 3000 : false;
     },
   });
 }
@@ -37,7 +37,7 @@ export function useUploadNote() {
 
       const res = await fetch(`${API_URL}/notes`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` }, // don't set Content-Type — browser sets it with the correct multipart boundary
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
       if (!res.ok) throw new Error("Upload failed");

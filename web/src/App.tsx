@@ -1,9 +1,8 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Layout } from "./components/layout/Layout";
-import { MemoryPage } from "./pages/MemoryPage";
-import { NotesPage } from "./pages/NotesPage";
-import { NoteDetailPage } from "./pages/NoteDetailPage";
+import { Layout } from "@/components/layout/Layout";
+import { MemoryPage } from "@/features/memory";
+import { NotesPage, NoteDetailPage } from "@/features/notes";
 
 const queryClient = new QueryClient();
 

@@ -1,27 +1,32 @@
-// pages/MemoryPage.tsx
 import { useEffect, useState } from "react";
-import { MemoryCard } from "../components/MemoryCard.tsx";
-import { RangeCard } from "../components/RangeCard.tsx";
-import { useBooks } from "@/hooks/Books.ts";
+import { MemoryCard } from "../components/MemoryCard";
+import { RangeCard } from "../components/RangeCard";
+import { useBooks } from "../api/useBooks";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/constants/config";
-import type { BookRange, ScriptureRangeDTO } from "@/models/BookRange";
-import { bookRangeToDTO } from "@/models/BookRange";
-import type { BookInfo } from "@/models/BookInfo.ts";
-import { useMemorySession } from "@/context/MemorySessionContext";
-import { useSaveSession, useSessionHistory } from "@/hooks/useSessions";
+import type { BookRange, ScriptureRangeDTO, BookInfo } from "../types";
+import { bookRangeToDTO } from "../types";
+import { useMemorySession } from "../context/MemorySessionContext";
+import { useSaveSession, useSessionHistory } from "../api/useSessions";
 import { SignedOut, SignInButton, useUser, useAuth } from "@clerk/clerk-react";
 import { BookOpen, Loader2 } from "lucide-react";
 
 type MemoryUnit =
-  | { kind: "chapter"; key: string; book: string; bookId: number; chapter: number; label: string }
+  | {
+      kind: "chapter";
+      key: string;
+      book: string;
+      bookId: number;
+      chapter: number;
+      label: string;
+    }
   | { kind: "range"; key: string; label: string; range: BookRange };
 
 type ChapterResult = { accuracy: number; feedback: string };
 
 function buildMemoryUnits(ranges: BookRange[]): MemoryUnit[] {
   const units: MemoryUnit[] = [];
-  // const seen = new Set<string>();
+  const seen = new Set<string>();
 
   for (const r of ranges) {
     // if (isWholeChapterRange(r)) {
@@ -72,7 +77,9 @@ export function MemoryPage() {
   }, [loadVersion]);
 
   const updateRange = (id: number, patch: Partial<BookRange>) =>
-    setRanges((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    setRanges((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+    );
 
   const removeRange = (id: number) =>
     setRanges((prev) => prev.filter((r) => r.id !== id));
@@ -82,7 +89,11 @@ export function MemoryPage() {
     const pos = { book: book.book, bookId: book.id, chapter: 1, verse: null };
     setRanges((prev) => [
       ...prev,
-      { id: nextId, start: { ...pos }, end: { ...pos, chapter: book.chapters } },
+      {
+        id: nextId,
+        start: { ...pos },
+        end: { ...pos, chapter: book.chapters },
+      },
     ]);
   };
 
@@ -90,14 +101,20 @@ export function MemoryPage() {
 
   function rangesSignature(ranges: BookRange[]): string {
     return ranges
-      .map((r) => `${r.start.bookId}:${r.start.chapter}:${r.start.verse ?? ""}-${r.end.bookId}:${r.end.chapter}:${r.end.verse ?? ""}`)
+      .map(
+        (r) =>
+          `${r.start.bookId}:${r.start.chapter}:${r.start.verse ?? ""}-${r.end.bookId}:${r.end.chapter}:${r.end.verse ?? ""}`,
+      )
       .sort()
       .join("|");
   }
 
   function sessionSignatureFromDTO(ranges: ScriptureRangeDTO[]): string {
     return ranges
-      .map((r) => `${r.startBookId}:${r.startChapter}:${r.startVerse ?? ""}-${r.endBookId}:${r.endChapter}:${r.endVerse ?? ""}`)
+      .map(
+        (r) =>
+          `${r.startBookId}:${r.startChapter}:${r.startVerse ?? ""}-${r.endBookId}:${r.endChapter}:${r.endVerse ?? ""}`,
+      )
       .sort()
       .join("|");
   }
@@ -107,7 +124,9 @@ export function MemoryPage() {
     try {
       if (isSignedIn) {
         const signature = rangesSignature(ranges);
-        const duplicate = history.find((session) => sessionSignatureFromDTO(session.ranges) === signature);
+        const duplicate = history.find(
+          (session) => sessionSignatureFromDTO(session.ranges) === signature,
+        );
 
         if (!duplicate) {
           saveSession(ranges.map(bookRangeToDTO));
@@ -131,14 +150,16 @@ export function MemoryPage() {
                 chapter: u.range.end.chapter,
                 verse: u.range.end.verse,
               },
-            }
+            },
       );
 
       const answersList = memoryUnits.map((u) => answers[u.key] ?? "");
 
       const token = isSignedIn ? await getToken() : null;
       console.log("[MemoryPage] isSignedIn:", isSignedIn, "hasToken:", !!token);
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }
@@ -186,24 +207,36 @@ export function MemoryPage() {
           <select
             value=""
             onChange={(e) => {
-              const selected = books.find((b) => b.id === Number(e.target.value));
+              const selected = books.find(
+                (b) => b.id === Number(e.target.value),
+              );
               if (selected) addRange(selected);
             }}
             disabled={books.length === 0}
             className="appearance-none h-10 rounded-lg border border-border px-4 text-sm text-muted-foreground bg-transparent focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
-            >
-            <option value="" disabled>+ Add</option>
+          >
+            <option value="" disabled>
+              + Add
+            </option>
             {books.map((b) => (
-              <option key={b.id} value={b.id}>{b.book}</option>
+              <option key={b.id} value={b.id}>
+                {b.book}
+              </option>
             ))}
           </select>
         </div>
 
         {ranges.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
-            <BookOpen size={32} className="text-muted-foreground" strokeWidth={1.5} />
+            <BookOpen
+              size={32}
+              className="text-muted-foreground"
+              strokeWidth={1.5}
+            />
             <div className="flex flex-col gap-1.5 max-w-sm">
-              <p className="text-base font-semibold">Nothing to summarize yet</p>
+              <p className="text-base font-semibold">
+                Nothing to summarize yet
+              </p>
               <p className="text-sm text-muted-foreground">
                 Add a passage above to start reviewing your memory.
               </p>
@@ -211,11 +244,14 @@ export function MemoryPage() {
             <SignedOut>
               <p className="text-xs text-muted-foreground mt-2 pt-3 border-t max-w-sm">
                 <SignInButton mode="modal">
-                  <button type="button" className="font-semibold underline underline-offset-2 hover:text-foreground">
+                  <button
+                    type="button"
+                    className="font-semibold underline underline-offset-2 hover:text-foreground"
+                  >
                     Log in
                   </button>
-                </SignInButton>
-                {" "}to upload your own notes and factor them into grading.
+                </SignInButton>{" "}
+                to upload your own notes and factor them into grading.
               </p>
             </SignedOut>
           </div>
@@ -226,7 +262,9 @@ export function MemoryPage() {
                 key={u.key}
                 sectionTitle={u.label}
                 value={answers[u.key] ?? ""}
-                onChange={(value) => setAnswers((prev) => ({ ...prev, [u.key]: value }))}
+                onChange={(value) =>
+                  setAnswers((prev) => ({ ...prev, [u.key]: value }))
+                }
                 result={results[u.key]}
               />
             ))}

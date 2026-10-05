@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
-import { useNote } from "@/hooks/useNotes";
+import { useNote } from "../api/useNotes";
 
 export function NoteDetailPage() {
   const { id } = useParams();

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
-import type { BookRange } from "@/models/BookRange";
+import type { BookRange } from "../types";
 
 type MemorySessionContextType = {
   ranges: BookRange[];

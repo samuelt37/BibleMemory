@@ -1,4 +1,8 @@
-// models/BookRange.ts
+export type BookInfo = {
+  id: number;
+  book: string;
+  chapters: number;
+};
 
 export type ScripturePosition = {
   book: string;
@@ -40,3 +44,10 @@ export function bookRangeToDTO(r: BookRange): ScriptureRangeDTO {
     endVerse: r.end.verse,
   };
 }
+
+export type MemorySession = {
+  id: number;
+  ranges: ScriptureRangeDTO[];
+  bookmarked: boolean;
+  createdAt: string;
+};

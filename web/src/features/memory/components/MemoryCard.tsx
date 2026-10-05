@@ -1,4 +1,3 @@
-// components/MemorySection.tsx
 type MemoryCardProps = {
   sectionTitle: string;
   value: string;

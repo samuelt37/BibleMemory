@@ -1,4 +1,3 @@
-// pages/NotesPage.tsx
 import { useState, useRef } from "react";
 import { Upload, FileText, X, Download, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,7 +7,7 @@ import {
   useUploadTextNote,
   useDeleteNote,
   fetchNoteDownloadURL,
-} from "@/hooks/useNotes";
+} from "../api/useNotes";
 import { useAuth } from "@clerk/clerk-react";
 import { useNavigate } from "react-router-dom";
 

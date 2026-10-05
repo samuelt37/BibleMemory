@@ -23,16 +23,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useMemorySession } from "@/context/MemorySessionContext";
-import { useBooks } from "@/hooks/Books";
-import type { BookRange, ScriptureRangeDTO } from "@/models/BookRange";
-import type { BookInfo } from "@/models/BookInfo";
-import type { MemorySession } from "@/models/Session";
 import {
+  useMemorySession,
+  useBooks,
   useDeleteSession,
   useSessionBookmarks,
   useSessionHistory,
-} from "@/hooks/useSessions";
+  type BookRange,
+  type ScriptureRangeDTO,
+  type BookInfo,
+  type MemorySession,
+} from "@/features/memory";
 
 function sessionLabel(session: MemorySession, books: BookInfo[]): string {
   return session.ranges

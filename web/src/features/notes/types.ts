@@ -7,4 +7,5 @@ export type Note = {
   status: "processing" | "ready" | "failed";
   createdAt: string;
   updatedAt: string;
+  rawText?: string;
 };

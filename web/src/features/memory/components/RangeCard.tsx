@@ -1,9 +1,7 @@
-// components/RangeCard.tsx
 import { useState } from "react";
 import { X } from "lucide-react";
-import type { BookRange, ScripturePosition } from "@/models/BookRange";
-import { isWholeChapterRange } from "@/models/BookRange";
-import type { BookInfo } from "@/models/BookInfo";
+import type { BookRange, ScripturePosition, BookInfo } from "../types";
+import { isWholeChapterRange } from "../types";
 
 type RangeCardProps = {
   range: BookRange;
@@ -118,7 +116,7 @@ export function RangeCard({ range, books, onUpdate, onRemove }: RangeCardProps) 
   const handleStartChange = (pos: ScripturePosition) => {
     const patch: Partial<BookRange> = { start: pos };
     if (comparePositions(pos, range.end) > 0) {
-    patch.end = { ...pos };
+      patch.end = { ...pos };
     }
     onUpdate(range.id, patch);
   };
