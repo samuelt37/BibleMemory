@@ -4,12 +4,17 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useMemorySession } from "@/context/MemorySessionContext";
-import { useBooks } from "@/hooks/Books";
-import type { BookRange, ScriptureRangeDTO } from "@/models/BookRange";
-import type { BookInfo } from "@/models/BookInfo";
-import type { MemorySession } from "@/models/Session";
-import { useDeleteSession, useSessionBookmarks, useSessionHistory } from "@/hooks/useSessions";
+import {
+  useMemorySession,
+  useBooks,
+  useDeleteSession,
+  useSessionBookmarks,
+  useSessionHistory,
+  type BookRange,
+  type ScriptureRangeDTO,
+  type BookInfo,
+  type MemorySession,
+} from "@/features/memory";
 
 function sessionLabel(session: MemorySession, books: BookInfo[]): string {
   return session.ranges
