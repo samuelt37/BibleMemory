@@ -1,11 +1,16 @@
-type MemoryCardProps = {
+type ReviewCardProps = {
   sectionTitle: string;
   value: string;
   onChange: (value: string) => void;
   result?: { accuracy: number; feedback: string };
 };
 
-export function MemoryCard({ sectionTitle, value, onChange, result }: MemoryCardProps) {
+export function ReviewCard({
+  sectionTitle,
+  value,
+  onChange,
+  result,
+}: ReviewCardProps) {
   return (
     <div className="p-4 border rounded-lg bg-card text-card-foreground shadow-xs">
       <p className="italic">{sectionTitle}</p>
@@ -19,7 +24,9 @@ export function MemoryCard({ sectionTitle, value, onChange, result }: MemoryCard
       />
 
       {result && (
-        <p className={`mt-2 text-sm ${result.accuracy >= 7 ? "text-green-600" : result.accuracy >= 4 ? "text-yellow-600" : "text-red-600"}`}>
+        <p
+          className={`mt-2 text-sm ${result.accuracy >= 7 ? "text-green-600" : result.accuracy >= 4 ? "text-yellow-600" : "text-red-600"}`}
+        >
           {result.accuracy}/10 — {result.feedback}
         </p>
       )}

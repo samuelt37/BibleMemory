@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/samuelt37/BibleMemory/internal/gemini"
 	"github.com/samuelt37/BibleMemory/internal/scripture"
 	"github.com/samuelt37/BibleMemory/internal/storage"
 )
@@ -21,13 +22,20 @@ type Service struct {
 	chunkRepo     *ChunkRepository
 	scriptureRepo *scripture.Repository
 	r2            *storage.R2Client
+	gemini        *gemini.Client
 
 	bookListCache   string
 	bookListCacheMu sync.Mutex
 }
 
 func NewService(repo *Repository, chunkRepo *ChunkRepository, scriptureRepo *scripture.Repository, r2 *storage.R2Client) *Service {
-	return &Service{repo: repo, chunkRepo: chunkRepo, scriptureRepo: scriptureRepo, r2: r2}
+	return &Service{
+		repo:          repo,
+		chunkRepo:     chunkRepo,
+		scriptureRepo: scriptureRepo,
+		r2:            r2,
+		gemini:        gemini.NewClient(),
+	}
 }
 
 func (s *Service) buildBookList() (string, error) {
@@ -77,7 +85,7 @@ func (s *Service) UploadNote(ctx context.Context, userID int, file multipart.Fil
 
 func (s *Service) extractAndProcess(ctx context.Context, userID, noteID int, fileBytes []byte, mimeType string) {
 	log.Println("extractAndProcess: starting for note", noteID, "size:", len(fileBytes), "bytes")
-	text, err := extractTextFromFile(ctx, fileBytes, mimeType)
+	text, err := extractTextFromFile(ctx, s.gemini, fileBytes, mimeType)
 	if err != nil {
 		log.Println("extractAndProcess: extraction failed for note", noteID, ":", err)
 		s.repo.UpdateStatus(noteID, "failed")
@@ -179,12 +187,12 @@ func (s *Service) ProcessNote(ctx context.Context, userID, noteID int) error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			match, err := matchChunkToVerse(ctx, c, bookList)
+			match, err := matchChunkToVerse(ctx, s.gemini, c, bookList)
 			if err != nil {
 				results[idx] = chunkResult{content: c, err: err}
 				return
 			}
-			embedding, err := embedChunk(ctx, c)
+			embedding, err := s.gemini.EmbedText(ctx, c, 768)
 			if err != nil {
 				results[idx] = chunkResult{content: c, err: err}
 				return
@@ -213,4 +221,8 @@ func (s *Service) ProcessNote(ctx context.Context, userID, noteID int) error {
 
 func (s *Service) GetNote(userID, noteID int) (*Note, error) {
 	return s.repo.GetByID(userID, noteID)
+}
+
+func (s *Service) EmbedText(ctx context.Context, text string) ([]float32, error) {
+	return s.gemini.EmbedText(ctx, text, 768)
 }

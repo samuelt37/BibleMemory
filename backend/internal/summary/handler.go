@@ -31,7 +31,7 @@ func (h *Handler) CheckSummary(w http.ResponseWriter, r *http.Request) {
 
 	userID, _ := auth.UserIDFromContext(r.Context())
 
-	results, err := h.service.CheckSummary(req, userID)
+	results, err := h.service.CheckSummary(r.Context(), req, userID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("grading failed: %v", err), http.StatusInternalServerError)
 		return

@@ -140,19 +140,28 @@ func (r *ChunkRepository) ListByNote(noteID int) ([]Chunk, error) {
 	return chunks, rows.Err()
 }
 
-func (r *ChunkRepository) FindRelevant(userID, startBookID, endBookID int) ([]string, error) {
+func (r *ChunkRepository) FindRelevant(userID, startBookID, endBookID int, queryEmb []float32) ([]string, error) {
 	loBook, hiBook := startBookID, endBookID
 	if hiBook < loBook {
 		loBook, hiBook = hiBook, loBook
 	}
 
-	rows, err := r.db.Query(
-		`SELECT content FROM note_chunks
-		 WHERE user_id = $1 AND book_id BETWEEN $2 AND $3
-		 ORDER BY created_at DESC
-		 LIMIT 5`,
-		userID, loBook, hiBook,
-	)
+	query := `SELECT content FROM note_chunks
+	          WHERE user_id = $1 AND book_id BETWEEN $2 AND $3
+	          ORDER BY created_at DESC
+	          LIMIT 5`
+	args := []any{userID, loBook, hiBook}
+
+	if queryEmb != nil {
+		query = `SELECT content FROM note_chunks
+		         WHERE user_id = $1 AND book_id BETWEEN $2 AND $3
+		           AND embedding IS NOT NULL
+		         ORDER BY embedding <=> $4
+		         LIMIT 5`
+		args = append(args, pgvector.NewVector(queryEmb))
+	}
+
+	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -168,3 +177,18 @@ func (r *ChunkRepository) FindRelevant(userID, startBookID, endBookID int) ([]st
 	}
 	return contents, rows.Err()
 }
+
+func (r *ChunkRepository) CountByBooks(userID, startBookID, endBookID int) (int, error) {
+	loBook, hiBook := startBookID, endBookID
+	if hiBook < loBook {
+		loBook, hiBook = hiBook, loBook
+	}
+
+	var count int
+	err := r.db.QueryRow(
+		`SELECT count(*) FROM note_chunks WHERE user_id = $1 AND book_id BETWEEN $2 AND $3`,
+		userID, loBook, hiBook,
+	).Scan(&count)
+	return count, err
+}
+

@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
-import { MemoryCard } from "../components/MemoryCard";
+import { ReviewCard } from "../components/ReviewCard";
 import { RangeCard } from "../components/RangeCard";
 import { useBooks } from "../api/useBooks";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/constants/config";
 import type { BookRange, ScriptureRangeDTO, BookInfo } from "../types";
 import { bookRangeToDTO } from "../types";
-import { useMemorySession } from "../context/MemorySessionContext";
+import { useReviewSession } from "../context/ReviewSessionContext";
 import { useSaveSession, useSessionHistory } from "../api/useSessions";
 import { SignedOut, SignInButton, useUser, useAuth } from "@clerk/clerk-react";
 import { BookOpen, Loader2 } from "lucide-react";
 
-type MemoryUnit =
+type ReviewUnit =
   | {
       kind: "chapter";
       key: string;
@@ -24,8 +24,8 @@ type MemoryUnit =
 
 type ChapterResult = { accuracy: number; feedback: string };
 
-function buildMemoryUnits(ranges: BookRange[]): MemoryUnit[] {
-  const units: MemoryUnit[] = [];
+function buildMemoryUnits(ranges: BookRange[]): ReviewUnit[] {
+  const units: ReviewUnit[] = [];
   // const seen = new Set<string>();
 
   for (const r of ranges) {
@@ -58,10 +58,10 @@ function buildMemoryUnits(ranges: BookRange[]): MemoryUnit[] {
   return units;
 }
 
-export function MemoryPage() {
+export function ReviewPage() {
   const { data: books = [] } = useBooks();
 
-  const { ranges, setRanges, loadVersion } = useMemorySession();
+  const { ranges, setRanges, loadVersion } = useReviewSession();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, ChapterResult>>({});
   const { mutate: saveSession } = useSaveSession();
@@ -258,7 +258,7 @@ export function MemoryPage() {
         ) : (
           <div className="flex flex-col gap-4">
             {memoryUnits.map((u) => (
-              <MemoryCard
+              <ReviewCard
                 key={u.key}
                 sectionTitle={u.label}
                 value={answers[u.key] ?? ""}

@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import type { BookRange } from "../types";
 
-type MemorySessionContextType = {
+type ReviewSessionContextType = {
   ranges: BookRange[];
   setRanges: React.Dispatch<React.SetStateAction<BookRange[]>>;
   addRangeDirectly: (range: BookRange) => void;
@@ -9,9 +9,11 @@ type MemorySessionContextType = {
   loadVersion: number; // bumps only when loadRanges is called
 };
 
-const MemorySessionContext = createContext<MemorySessionContextType | null>(null);
+const ReviewSessionContext = createContext<ReviewSessionContextType | null>(
+  null,
+);
 
-export function MemorySessionProvider({ children }: { children: ReactNode }) {
+export function ReviewSessionProvider({ children }: { children: ReactNode }) {
   const [ranges, setRanges] = useState<BookRange[]>([]);
   const [loadVersion, setLoadVersion] = useState(0);
 
@@ -28,16 +30,19 @@ export function MemorySessionProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <MemorySessionContext.Provider
+    <ReviewSessionContext.Provider
       value={{ ranges, setRanges, addRangeDirectly, loadRanges, loadVersion }}
     >
       {children}
-    </MemorySessionContext.Provider>
+    </ReviewSessionContext.Provider>
   );
 }
 
-export function useMemorySession() {
-  const ctx = useContext(MemorySessionContext);
-  if (!ctx) throw new Error("useMemorySession must be used within MemorySessionProvider");
+export function useReviewSession() {
+  const ctx = useContext(ReviewSessionContext);
+  if (!ctx)
+    throw new Error(
+      "useReviewSession must be used within ReviewSessionProvider",
+    );
   return ctx;
 }

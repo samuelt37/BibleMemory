@@ -24,7 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  useMemorySession,
+  useReviewSession,
   useBooks,
   useDeleteSession,
   useSessionBookmarks,
@@ -33,7 +33,7 @@ import {
   type ScriptureRangeDTO,
   type BookInfo,
   type MemorySession,
-} from "@/features/memory";
+} from "@/features/review";
 
 function sessionLabel(session: MemorySession, books: BookInfo[]): string {
   return session.ranges
@@ -144,7 +144,7 @@ export function Sidebar() {
   const history = historyData ?? [];
   const bookmarks = bookmarksData ?? [];
   const { data: books = [] } = useBooks();
-  const { loadRanges } = useMemorySession();
+  const { loadRanges } = useReviewSession();
   const { mutate: deleteSession } = useDeleteSession();
 
   const navigate = useNavigate();

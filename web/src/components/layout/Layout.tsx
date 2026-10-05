@@ -1,6 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
-import { MemorySessionProvider } from "@/features/memory";
+import { MemorySessionProvider } from "@/features/review";
 
 export function Layout() {
   return (

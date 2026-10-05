@@ -1,15 +1,13 @@
 package summary
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
-	"os"
 	"strings"
-	"time"
 
+	"github.com/samuelt37/BibleMemory/internal/gemini"
 	"github.com/samuelt37/BibleMemory/internal/notes"
 	"github.com/samuelt37/BibleMemory/internal/scripture"
 )
@@ -17,6 +15,7 @@ import (
 type Service struct {
 	repo      *scripture.Repository
 	chunkRepo *notes.ChunkRepository
+	gemini    *gemini.Client
 }
 
 func NewService(
@@ -26,10 +25,11 @@ func NewService(
 	return &Service{
 		repo:      repo,
 		chunkRepo: chunkRepo,
+		gemini:    gemini.NewClient(),
 	}
 }
 
-func (s *Service) CheckSummary(req Request, userID int) ([]Result, error) {
+func (s *Service) CheckSummary(ctx context.Context, req Request, userID int) ([]Result, error) {
 	if len(req.Answers) != len(req.Scripture.Ranges) {
 		return nil, fmt.Errorf("answers count (%d) does not match ranges count (%d)", len(req.Answers), len(req.Scripture.Ranges))
 	}
@@ -57,10 +57,23 @@ func (s *Service) CheckSummary(req Request, userID int) ([]Result, error) {
 			if rng.End != nil {
 				endBook = rng.End.Book
 			}
-			chunks, err := s.chunkRepo.FindRelevant(userID, rng.Start.Book, endBook)
+
+			// Fast path: fetch chunks by recency (<2ms DB query)
+			chunks, err := s.chunkRepo.FindRelevant(userID, rng.Start.Book, endBook, nil)
 			if err != nil {
 				log.Printf("CheckSummary: error finding notes for user %d (books %d-%d): %v", userID, rng.Start.Book, endBook, err)
 			} else {
+				// Only perform vector similarity embedding if the user has more than 5 notes
+				if len(chunks) == 5 {
+					if total, _ := s.chunkRepo.CountByBooks(userID, rng.Start.Book, endBook); total > 5 {
+						emb, err := s.gemini.EmbedText(ctx, passages[i], 768)
+						if err == nil && emb != nil {
+							if vecChunks, err := s.chunkRepo.FindRelevant(userID, rng.Start.Book, endBook, emb); err == nil && len(vecChunks) > 0 {
+								chunks = vecChunks
+							}
+						}
+					}
+				}
 				log.Printf("CheckSummary: found %d note chunk(s) for user %d (books %d-%d)", len(chunks), userID, rng.Start.Book, endBook)
 				if len(chunks) > 0 {
 					notesContext[i] = strings.Join(chunks, "\n---\n")
@@ -136,6 +149,8 @@ func (s *Service) gradeAllWithAI(userAnswers, passages, notesContext []string) (
 	sb.WriteString("- If the notes are irrelevant to the passage, do not mention them.\n")
 	sb.WriteString("- Do not mention notes merely because they exist; mention them when they contain a relevant personal application, reflection, interpretation, or insight that connects to the summary.\n")
 	sb.WriteString("- Do not mention the scoring process, base score, bonus points, or how many points were gained or lost.\n\n")
+	sb.WriteString("- When describing what the user captured, restate only what their summary actually says. Do not add reasons, causes, motivations, or details from the passage that the user did not write (for example, if they say a character wept, do not say what the character wept about).\n")
+	sb.WriteString("- Put anything the user left out in the 'could improve' part of the feedback, not in the description of what they got right.\n")
 
 	sb.WriteString(fmt.Sprintf(
 		"Respond ONLY with a valid JSON array of exactly %d elements matching the order of items below:\n",
@@ -163,132 +178,34 @@ func (s *Service) gradeAllWithAI(userAnswers, passages, notesContext []string) (
 		},
 		"generationConfig": map[string]any{
 			"response_mime_type": "application/json",
+			"temperature":        0.2,
 		},
 	}
-	payload, err := json.Marshal(body)
+	rawText, err := s.gemini.GenerateContent(context.Background(), body)
 	if err != nil {
 		return nil, err
 	}
 
-	apiKey := os.Getenv("API_KEY")
-	if apiKey == "" {
-		apiKey = os.Getenv("GEMINI_API_KEY")
-	}
-	if apiKey == "" {
-		return nil, fmt.Errorf("API_KEY environment variable is not set on the server")
-	}
-
-	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	primaryModel := os.Getenv("GEMINI_MODEL")
-	if primaryModel == "" {
-		primaryModel = "gemini-3.6-flash"
-	}
-
-	modelsToTry := []string{primaryModel}
-	for _, fallback := range []string{"gemini-flash-lite-latest", "gemini-3.5-flash-lite"} {
-		if fallback != primaryModel {
-			modelsToTry = append(modelsToTry, fallback)
+	rawText = strings.TrimSpace(rawText)
+	var results []Result
+	if err := json.Unmarshal([]byte(rawText), &results); err != nil {
+		var single Result
+		if err2 := json.Unmarshal([]byte(rawText), &single); err2 == nil {
+			results = []Result{single}
+		} else {
+			return nil, fmt.Errorf("failed to parse Gemini response: %w (raw: %s)", err, rawText)
 		}
 	}
 
-	var lastErr error
-	for _, modelName := range modelsToTry {
-		for attempt := 0; attempt < 2; attempt++ {
-			if attempt > 0 {
-				time.Sleep(500 * time.Millisecond)
-			}
-
-			url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", modelName)
-			httpReq, err := http.NewRequest("POST", url, bytes.NewReader(payload))
-			if err != nil {
-				return nil, err
-			}
-
-			httpReq.Header.Set("Content-Type", "application/json")
-			httpReq.Header.Set("x-goog-api-key", apiKey)
-
-			resp, err := httpClient.Do(httpReq)
-			if err != nil {
-				lastErr = err
-				continue
-			}
-
-			if resp.StatusCode == http.StatusServiceUnavailable {
-				var errBody bytes.Buffer
-				errBody.ReadFrom(resp.Body)
-				resp.Body.Close()
-				lastErr = fmt.Errorf("Gemini API returned status 503 (high demand) for model %s: %s", modelName, errBody.String())
-				break
-			}
-
-			if resp.StatusCode == http.StatusTooManyRequests {
-				var errBody bytes.Buffer
-				errBody.ReadFrom(resp.Body)
-				resp.Body.Close()
-				lastErr = fmt.Errorf("Gemini API returned status 429 (rate limit) for model %s: %s", modelName, errBody.String())
-				break
-			}
-
-			if resp.StatusCode == http.StatusNotFound {
-				var errBody bytes.Buffer
-				errBody.ReadFrom(resp.Body)
-				resp.Body.Close()
-				lastErr = fmt.Errorf("Gemini API returned status 404 for model %s: %s", modelName, errBody.String())
-				break
-			}
-
-			if resp.StatusCode != http.StatusOK {
-				var errBody bytes.Buffer
-				errBody.ReadFrom(resp.Body)
-				resp.Body.Close()
-				return nil, fmt.Errorf("Gemini API returned status %d: %s", resp.StatusCode, errBody.String())
-			}
-
-			var apiResp struct {
-				Candidates []struct {
-					Content struct {
-						Parts []struct {
-							Text string `json:"text"`
-						} `json:"parts"`
-					} `json:"content"`
-				} `json:"candidates"`
-			}
-			err = json.NewDecoder(resp.Body).Decode(&apiResp)
-			resp.Body.Close()
-			if err != nil {
-				return nil, err
-			}
-			if len(apiResp.Candidates) == 0 || len(apiResp.Candidates[0].Content.Parts) == 0 {
-				return nil, fmt.Errorf("empty response from Gemini")
-			}
-
-			rawText := strings.TrimSpace(apiResp.Candidates[0].Content.Parts[0].Text)
-			var results []Result
-			if err := json.Unmarshal([]byte(rawText), &results); err != nil {
-				var single Result
-				if err2 := json.Unmarshal([]byte(rawText), &single); err2 == nil {
-					results = []Result{single}
-				} else {
-					return nil, fmt.Errorf("failed to parse Gemini response: %w (raw: %s)", err, rawText)
-				}
-			}
-
-			for len(results) < count {
-				results = append(results, Result{
-					Accuracy: 5,
-					Feedback: "Passage evaluated.",
-				})
-			}
-			if len(results) > count {
-				results = results[:count]
-			}
-
-			return results, nil
-		}
+	for len(results) < count {
+		results = append(results, Result{
+			Accuracy: 5,
+			Feedback: "Passage evaluated.",
+		})
+	}
+	if len(results) > count {
+		results = results[:count]
 	}
 
-	return nil, fmt.Errorf("grading failed after retries: %w", lastErr)
+	return results, nil
 }
