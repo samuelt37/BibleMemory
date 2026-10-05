@@ -26,7 +26,7 @@ type ChapterResult = { accuracy: number; feedback: string };
 
 function buildMemoryUnits(ranges: BookRange[]): MemoryUnit[] {
   const units: MemoryUnit[] = [];
-  const seen = new Set<string>();
+  // const seen = new Set<string>();
 
   for (const r of ranges) {
     // if (isWholeChapterRange(r)) {
