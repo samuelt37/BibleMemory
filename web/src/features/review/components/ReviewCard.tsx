@@ -37,7 +37,6 @@ export function ReviewCard({
   onViewAllNotes,
 }: ReviewCardProps) {
   const [hoveredNoteId, setHoveredNoteId] = useState<number | null>(null);
-  const quote = result?.notes?.find((n) => n.noteId === hoveredNoteId)?.quote;
   const hoveredIndex =
     result?.notes?.findIndex((n) => n.noteId === hoveredNoteId) ?? -1;
   const hovered = hoveredIndex >= 0 ? result?.notes?.[hoveredIndex] : undefined;
