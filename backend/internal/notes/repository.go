@@ -140,24 +140,28 @@ func (r *ChunkRepository) ListByNote(noteID int) ([]Chunk, error) {
 	return chunks, rows.Err()
 }
 
-func (r *ChunkRepository) FindRelevant(userID, startBookID, endBookID int, queryEmb []float32) ([]string, error) {
+func (r *ChunkRepository) FindRelevant(userID, startBookID, endBookID int, queryEmb []float32) ([]ChunkHit, error) {
 	loBook, hiBook := startBookID, endBookID
 	if hiBook < loBook {
 		loBook, hiBook = hiBook, loBook
 	}
 
-	query := `SELECT content FROM note_chunks
-	          WHERE user_id = $1 AND book_id BETWEEN $2 AND $3
-	          ORDER BY created_at DESC
-	          LIMIT 5`
+	query := `SELECT c.id, c.note_id, n.filename, c.content
+          FROM note_chunks c
+          JOIN notes n ON n.id = c.note_id
+          WHERE c.user_id = $1 AND c.book_id BETWEEN $2 AND $3
+          ORDER BY c.created_at DESC
+          LIMIT 5`
 	args := []any{userID, loBook, hiBook}
 
 	if queryEmb != nil {
-		query = `SELECT content FROM note_chunks
-		         WHERE user_id = $1 AND book_id BETWEEN $2 AND $3
-		           AND embedding IS NOT NULL
-		         ORDER BY embedding <=> $4
-		         LIMIT 5`
+		query = `SELECT c.id, c.note_id, n.filename, c.content
+	         FROM note_chunks c
+	         JOIN notes n ON n.id = c.note_id
+	         WHERE c.user_id = $1 AND c.book_id BETWEEN $2 AND $3
+	           AND c.embedding IS NOT NULL
+	         ORDER BY c.embedding <=> $4
+	         LIMIT 5`
 		args = append(args, pgvector.NewVector(queryEmb))
 	}
 
@@ -167,10 +171,10 @@ func (r *ChunkRepository) FindRelevant(userID, startBookID, endBookID int, query
 	}
 	defer rows.Close()
 
-	var contents []string
+	var contents []ChunkHit
 	for rows.Next() {
-		var c string
-		if err := rows.Scan(&c); err != nil {
+		var c ChunkHit
+		if err := rows.Scan(&c.ChunkID, &c.NoteID, &c.Title, &c.Content); err != nil {
 			return nil, err
 		}
 		contents = append(contents, c)
@@ -191,4 +195,3 @@ func (r *ChunkRepository) CountByBooks(userID, startBookID, endBookID int) (int,
 	).Scan(&count)
 	return count, err
 }
-

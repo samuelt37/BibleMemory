@@ -51,3 +51,16 @@ export type ReviewSession = {
   bookmarked: boolean;
   createdAt: string;
 };
+
+export type ReviewResult = {
+  accuracy: number;
+  feedback: string;
+  notes?: NoteRef[];
+};
+
+export type NoteRef = { 
+  noteId: number; 
+  title: string; 
+  quote?: string; 
+  summaryQuote?: string;
+};

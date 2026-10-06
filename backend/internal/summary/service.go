@@ -39,6 +39,7 @@ func (s *Service) CheckSummary(ctx context.Context, req Request, userID int) ([]
 
 	passages := make([]string, len(req.Scripture.Ranges))
 	notesContext := make([]string, len(req.Scripture.Ranges))
+	noteRefs := make([][]NoteRef, len(req.Scripture.Ranges))
 
 	for i, rng := range req.Scripture.Ranges {
 		singleRangeQuery := scripture.Query{
@@ -74,9 +75,17 @@ func (s *Service) CheckSummary(ctx context.Context, req Request, userID int) ([]
 						}
 					}
 				}
-				log.Printf("CheckSummary: found %d note chunk(s) for user %d (books %d-%d)", len(chunks), userID, rng.Start.Book, endBook)
 				if len(chunks) > 0 {
-					notesContext[i] = strings.Join(chunks, "\n---\n")
+					parts := make([]string, 0, len(chunks))
+					seen := make(map[int]bool)
+					for _, c := range chunks {
+						parts = append(parts, fmt.Sprintf("[Note %d: %s]\n%s", c.NoteID, c.Title, c.Content))
+						if !seen[c.NoteID] {
+							seen[c.NoteID] = true
+							noteRefs[i] = append(noteRefs[i], NoteRef{NoteID: c.NoteID, Title: c.Title})
+						}
+					}
+					notesContext[i] = strings.Join(parts, "\n---\n")
 				}
 			}
 		} else {
@@ -84,7 +93,29 @@ func (s *Service) CheckSummary(ctx context.Context, req Request, userID int) ([]
 		}
 	}
 
-	return s.gradeAllWithAI(req.Answers, passages, notesContext)
+	results, err := s.gradeAllWithAI(req.Answers, passages, notesContext)
+	if err != nil {
+		return nil, err
+	}
+	for i := range results {
+		if i < len(noteRefs) {
+			uses := make(map[int]NoteUse, len(results[i].NotesUsed))
+			for _, u := range results[i].NotesUsed {
+				uses[u.ID] = u
+			}
+			for _, ref := range noteRefs[i] {
+				u, ok := uses[ref.NoteID]
+				if !ok {
+					continue
+				}
+				ref.Quote = matchQuote(results[i].Feedback, u.Quote)
+				ref.SummaryQuote = matchQuote(req.Answers[i], u.SummaryQuote)
+				results[i].Notes = append(results[i].Notes, ref)
+			}
+		}
+		results[i].NotesUsed = nil
+	}
+	return results, nil
 }
 
 func concatVerses(verses []scripture.VerseInfo) string {
@@ -100,79 +131,12 @@ func concatVerses(verses []scripture.VerseInfo) string {
 
 func (s *Service) gradeAllWithAI(userAnswers, passages, notesContext []string) ([]Result, error) {
 	count := len(userAnswers)
-
-	var sb strings.Builder
-
-	sb.WriteString("You are evaluating whether a user's summary correctly captures the key content of a Bible passage.\n")
-	sb.WriteString("The user is NOT trying to recite the passage word-for-word — they are summarizing it in their own words.\n")
-	sb.WriteString("Judge whether their summary demonstrates an accurate understanding of the passage's main events, ideas, or teachings.\n")
-	sb.WriteString("Do not penalize different phrasing, paraphrasing, or concise wording.\n")
-	sb.WriteString("Do penalize factual errors, misunderstandings, and failure to capture enough meaningful content to demonstrate understanding.\n\n")
-
-	sb.WriteString("Scoring guidelines:\n")
-	sb.WriteString("- First, determine a base score (1-10) strictly from the passage and the user's summary, as if no notes existed.\n")
-	sb.WriteString("- Accuracy and meaningful passage-specific content are more important than completeness.\n")
-	sb.WriteString("- A summary does NOT need to mention every event, detail, person, or teaching in the passage to receive a good score.\n")
-	sb.WriteString("- Reward summaries that accurately capture multiple specific and meaningful elements of the passage, even when other important details are omitted.\n")
-	sb.WriteString("- Missing some major events should reduce the score proportionally, but should not by itself make an otherwise accurate, passage-specific summary a very low score.\n")
-	sb.WriteString("- A concise summary can score well if the content it includes is accurate and meaningfully represents the passage.\n")
-	sb.WriteString("- Distinguish between an incomplete but passage-specific summary and a vague or generic summary.\n")
-	sb.WriteString("- Reserve very low scores (1-3) for summaries that are substantially incorrect, extremely vague, contain very little passage-specific content, or demonstrate minimal understanding of the passage.\n")
-	sb.WriteString("- A score of 4 or higher should generally indicate that the summary demonstrates real engagement with specific content from the passage, even if it is incomplete.\n")
-	sb.WriteString("- Never fabricate that the summary covered content it did not actually mention.\n\n")
-	sb.WriteString("- When a summary identifies a central theme and several specific events or details accurately, it should generally receive more than a middling score even if it omits other major events.\n")
-	sb.WriteString("- Do not require a summary to cover most of the passage before giving it a score above 5.\n")
-	sb.WriteString("- A summary's score should reflect both accuracy and the amount of meaningful understanding demonstrated, not simply the percentage of major events mentioned.\n")
-
-	sb.WriteString("Notes handling:\n")
-	sb.WriteString("- If no notes are provided for an item, treat the notes as completely absent.\n")
-	sb.WriteString("- Never assume, infer, or hallucinate that notes exist.\n")
-	sb.WriteString("- Notes may contain additional observations, interpretations, personal applications, or reflections about the passage.\n")
-	sb.WriteString("- Notes may contribute to the score only through the bonus described below; they must never affect the base score.\n")
-	sb.WriteString("- Notes must be relevant to the passage being evaluated to affect the score or be mentioned in feedback.\n")
-	sb.WriteString("- If relevant notes support or reinforce the understanding demonstrated in the summary, you may mention that connection specifically.\n")
-	sb.WriteString("- If relevant notes contain an important application, interpretation, or insight that is not reflected in the summary, you may specifically point out that connection and encourage the user to incorporate it into their summary.\n")
-	sb.WriteString("- If relevant notes contain useful content that the summary does not capture, identify the specific idea rather than simply saying that notes are available.\n")
-	sb.WriteString("- If notes are irrelevant to the passage, they must not affect the score or bonus and should not be mentioned in feedback.\n")
-	sb.WriteString("- Never mention the bonus point, how many points the notes contributed, or that notes did or did not affect the score.\n\n")
-
-	sb.WriteString("Feedback guidelines:\n")
-	sb.WriteString("- In the \"feedback\" field, provide 1-2 constructive sentences about the user's summary.\n")
-	sb.WriteString("- Clearly acknowledge what the user captured correctly before describing what could be improved.\n")
-	sb.WriteString("- Base your description of what the user got right or wrong on their summary text. Never claim that the user included something that appears only in their notes.\n")
-	sb.WriteString("- Do not treat a concise summary as incorrect simply because it does not include every event in the passage.\n")
-	sb.WriteString("- When the summary accurately captures multiple specific events, people, ideas, or teachings, acknowledge that understanding even if other content is omitted.\n")
-	sb.WriteString("- If relevant notes contain a personal application, reflection, or interpretation that directly connects to something in the summary, ALWAYS mention that connection in the feedback.\n")
-	sb.WriteString("- When mentioning a personal application or reflection from the notes, state the specific insight rather than merely saying that notes are available.\n")
-	sb.WriteString("- If the notes contain a meaningful insight that is not reflected in the summary, mention that insight as something the user could incorporate into their summary.\n")
-	sb.WriteString("- Make clear that an insight mentioned from the notes comes from their notes and was not already included in their summary.\n")
-	sb.WriteString("- If the notes are irrelevant to the passage, do not mention them.\n")
-	sb.WriteString("- Do not mention notes merely because they exist; mention them when they contain a relevant personal application, reflection, interpretation, or insight that connects to the summary.\n")
-	sb.WriteString("- Do not mention the scoring process, base score, bonus points, or how many points were gained or lost.\n\n")
-	sb.WriteString("- When describing what the user captured, restate only what their summary actually says. Do not add reasons, causes, motivations, or details from the passage that the user did not write (for example, if they say a character wept, do not say what the character wept about).\n")
-	sb.WriteString("- Put anything the user left out in the 'could improve' part of the feedback, not in the description of what they got right.\n")
-
-	sb.WriteString(fmt.Sprintf(
-		"Respond ONLY with a valid JSON array of exactly %d elements matching the order of items below:\n",
-		count,
-	))
-	sb.WriteString(`[{"accuracy": 8, "feedback": "..."}, {"accuracy": 9, "feedback": "..."}]` + "\n\n")
-
-	sb.WriteString("Items to evaluate:\n")
-
-	for i := 0; i < count; i++ {
-		sb.WriteString(fmt.Sprintf("--- Item %d ---\nPassage text: %s\n", i+1, passages[i]))
-		if notesContext[i] != "" {
-			sb.WriteString(fmt.Sprintf("User's own notes on this passage: %s\n", notesContext[i]))
-		}
-		sb.WriteString(fmt.Sprintf("User's summary: %s\n\n", userAnswers[i]))
-	}
-
+	prompt := buildGradingPrompt(userAnswers, passages, notesContext)
 	body := map[string]any{
 		"contents": []map[string]any{
 			{
 				"parts": []map[string]string{
-					{"text": sb.String()},
+					{"text": prompt},
 				},
 			},
 		},
@@ -208,4 +172,19 @@ func (s *Service) gradeAllWithAI(userAnswers, passages, notesContext []string) (
 	}
 
 	return results, nil
+}
+
+func matchQuote(feedback, quote string) string {
+	q := strings.TrimSpace(quote)
+	if q == "" {
+		return ""
+	}
+	if strings.Contains(feedback, q) {
+		return q
+	}
+	q = strings.TrimRight(q, ".,;:!? ")
+	if q != "" && strings.Contains(feedback, q) {
+		return q
+	}
+	return ""
 }

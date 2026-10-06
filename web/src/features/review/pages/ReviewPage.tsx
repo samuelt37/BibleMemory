@@ -10,6 +10,8 @@ import { useReviewSession } from "../context/ReviewSessionContext";
 import { useSaveSession, useSessionHistory } from "../api/useSessions";
 import { SignedOut, SignInButton, useUser, useAuth } from "@clerk/clerk-react";
 import { BookOpen, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { NoteView } from "@/features/notes/components/NoteView";
 
 type ReviewUnit =
   | {
@@ -26,24 +28,8 @@ type ChapterResult = { accuracy: number; feedback: string };
 
 function buildReviewUnits(ranges: BookRange[]): ReviewUnit[] {
   const units: ReviewUnit[] = [];
-  // const seen = new Set<string>();
 
   for (const r of ranges) {
-    // if (isWholeChapterRange(r)) {
-    //   for (let ch = r.start.chapter; ch <= r.end.chapter; ch++) {
-    //     const key = `${r.start.bookId}-${ch}`;
-    //     if (seen.has(key)) continue;
-    //     seen.add(key);
-    //     units.push({
-    //       kind: "chapter",
-    //       key,
-    //       book: r.start.book,
-    //       bookId: r.start.bookId,
-    //       chapter: ch,
-    //       label: `${r.start.book} — Chapter ${ch}`,
-    //     });
-    //   }
-    // } else {
     const pos = (p: BookRange["start"]) =>
       `${p.book} ${p.chapter}${p.verse !== null ? `:${p.verse}` : ""}`;
     units.push({
@@ -53,7 +39,6 @@ function buildReviewUnits(ranges: BookRange[]): ReviewUnit[] {
       range: r,
     });
   }
-  // }
 
   return units;
 }
@@ -70,6 +55,7 @@ export function ReviewPage() {
   const { getToken } = useAuth();
 
   const [isChecking, setIsChecking] = useState(false);
+  const [openNoteId, setOpenNoteId] = useState<number | null>(null);
 
   useEffect(() => {
     setAnswers({});
@@ -266,8 +252,19 @@ export function ReviewPage() {
                   setAnswers((prev) => ({ ...prev, [u.key]: value }))
                 }
                 result={results[u.key]}
+                onOpenNote={setOpenNoteId}
               />
             ))}
+
+            <Dialog
+              open={openNoteId !== null}
+              onOpenChange={(o) => !o && setOpenNoteId(null)}
+            >
+              <DialogContent className="max-h-[80vh] overflow-y-auto">
+                <DialogTitle className="sr-only">Note</DialogTitle>
+                {openNoteId !== null && <NoteView noteId={openNoteId} />}
+              </DialogContent>
+            </Dialog>
           </div>
         )}
       </div>

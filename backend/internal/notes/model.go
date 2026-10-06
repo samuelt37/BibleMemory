@@ -29,3 +29,10 @@ type Chunk struct {
 }
 
 type NoteChunk = Chunk
+
+type ChunkHit struct {
+	ChunkID int
+	NoteID  int
+	Title   string
+	Content string
+}
