@@ -69,8 +69,3 @@ export type NoteRef = {
 export type ReviewUnit = { key: string; label: string; range: BookRange };
 
 export type ChapterResult = { accuracy: number; feedback: string };
-
-type OpenNote = {
-  note: NoteRef;
-  colorIndex: number;
-};
