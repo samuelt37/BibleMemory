@@ -73,7 +73,8 @@ function notesUrlForUnit(u: ReviewUnit) {
 }
 
 export function ReviewPage() {
-  const { data: books = [] } = useBooks();
+  const { data: books = [], isPending, isError } = useBooks();
+  const loadingBooks = books.length === 0;
   const navigate = useNavigate();
 
   const {
@@ -247,26 +248,36 @@ export function ReviewPage() {
               onRemove={removeRange}
             />
           ))}
-          <select
-            value=""
-            onChange={(e) => {
-              const selected = books.find(
-                (b) => b.id === Number(e.target.value),
-              );
-              if (selected) addRange(selected);
-            }}
-            disabled={books.length === 0}
-            className="appearance-none h-10 rounded-lg border border-border px-4 text-sm text-muted-foreground bg-transparent focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
-          >
-            <option value="" disabled>
-              + Add
-            </option>
-            {books.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.book}
+          {isPending ? (
+            <div className="h-10 flex items-center gap-2 rounded-lg border border-border px-4 text-sm text-muted-foreground">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+              Waking up server…
+            </div>
+          ) : isError ? (
+            <div className="h-10 flex items-center rounded-lg border border-border px-4 text-sm text-destructive">
+              Failed to load books
+            </div>
+          ) : (
+            <select
+              value=""
+              onChange={(e) => {
+                const selected = books.find(
+                  (b) => b.id === Number(e.target.value),
+                );
+                if (selected) addRange(selected);
+              }}
+              className="appearance-none h-10 rounded-lg border border-border px-4 text-sm text-muted-foreground bg-transparent focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
+            >
+              <option value="" disabled>
+                + Add
               </option>
-            ))}
-          </select>
+              {books.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.book}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {ranges.length === 0 ? (
