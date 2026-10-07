@@ -41,11 +41,11 @@ func (c *Client) getAPIKey() (string, error) {
 func (c *Client) modelsToTry() []string {
 	primaryModel := os.Getenv("GEMINI_MODEL")
 	if primaryModel == "" {
-		primaryModel = "gemini-3.6-flash"
+		primaryModel = "gemini-flash-lite-latest"
 	}
 
 	models := []string{primaryModel}
-	for _, fallback := range []string{"gemini-flash-lite-latest", "gemini-3.5-flash-lite"} {
+	for _, fallback := range []string{"gemini-3.6-flash", "gemini-3.5-flash-lite"} {
 		if fallback != primaryModel {
 			models = append(models, fallback)
 		}

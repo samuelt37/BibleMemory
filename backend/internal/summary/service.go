@@ -93,7 +93,7 @@ func (s *Service) CheckSummary(ctx context.Context, req Request, userID int) ([]
 		}
 	}
 
-	results, err := s.gradeAllWithAI(req.Answers, passages, notesContext)
+	results, err := s.gradeAllWithAI(ctx, req.Answers, passages, notesContext)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,10 @@ func concatVerses(verses []scripture.VerseInfo) string {
 	return sb.String()
 }
 
-func (s *Service) gradeAllWithAI(userAnswers, passages, notesContext []string) ([]Result, error) {
+func (s *Service) gradeAllWithAI(
+	ctx context.Context,
+	userAnswers, passages, notesContext []string,
+) ([]Result, error) {
 	count := len(userAnswers)
 	prompt := buildGradingPrompt(userAnswers, passages, notesContext)
 	body := map[string]any{
@@ -147,7 +150,7 @@ func (s *Service) gradeAllWithAI(userAnswers, passages, notesContext []string) (
 			"temperature":        0.2,
 		},
 	}
-	rawText, err := s.gemini.GenerateContent(context.Background(), body)
+	rawText, err := s.gemini.GenerateContent(ctx, body)
 	if err != nil {
 		return nil, err
 	}
