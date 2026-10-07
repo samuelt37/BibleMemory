@@ -9,3 +9,9 @@ export type Note = {
   updatedAt: string;
   rawText?: string;
 };
+
+export type NoteFilters = {
+  q?: string;
+  book?: string | null;
+  chapter?: string | null;
+};

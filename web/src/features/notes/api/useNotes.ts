@@ -1,22 +1,30 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useAuth } from "@clerk/clerk-react";
 import { API_URL } from "@/constants/config";
-import type { Note } from "../types";
+import type { Note, NoteFilters } from "../types";
 
-export function useNotesList() {
+export function useNotesList(filters: NoteFilters = {}) {
   const { getToken, isSignedIn } = useAuth();
+  const { q = "", book = null, chapter = null } = filters;
 
   return useQuery({
-    queryKey: ["notes"],
+    queryKey: ["notes", "list", { q, book, chapter }],
     queryFn: async () => {
       const token = await getToken();
-      const res = await fetch(`${API_URL}/notes`, {
+      const params = new URLSearchParams();
+      if (q) params.set("q", q);
+      if (book !== null) params.set("book", book);
+      if (book !== null && chapter) params.set("chapter", chapter);
+      const qs = params.toString();
+
+      const res = await fetch(`${API_URL}/notes${qs ? `?${qs}` : ""}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to fetch notes");
       return res.json() as Promise<Note[]>;
     },
     enabled: !!isSignedIn,
+    placeholderData: keepPreviousData,
     refetchInterval: (query) => {
       const notes = query.state.data ?? [];
       const stillProcessing = notes.some((n) => n.status === "processing");

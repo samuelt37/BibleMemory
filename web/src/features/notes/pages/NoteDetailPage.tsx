@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
+
 import { NoteView } from "../components/NoteView";
 
 export function NoteDetailPage() {
@@ -11,7 +12,7 @@ export function NoteDetailPage() {
       <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
         <button
           type="button"
-          onClick={() => navigate("/notes")}
+          onClick={() => navigate(`/notes${location.search}`)}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground w-fit"
         >
           <ChevronLeft size={16} />

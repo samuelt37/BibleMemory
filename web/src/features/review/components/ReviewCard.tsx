@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { noteColor } from "@/features/notes/components/noteColors";
 import { NotePill } from "@/features/notes/components/NotePill";
-import type { ReviewResult } from "../types";
+import type { NoteRef, ReviewResult } from "../types";
 import { HighlightedTextarea } from "@/features/notes/components/HighlightedTextarea";
 
 type ReviewCardProps = {
@@ -9,7 +9,7 @@ type ReviewCardProps = {
   value: string;
   onChange: (value: string) => void;
   result?: ReviewResult;
-  onOpenNote?: (noteId: number) => void;
+  onOpen?: (note: NoteRef, colorIndex: number) => void;
   onViewAllNotes?: () => void;
 };
 
@@ -33,7 +33,7 @@ export function ReviewCard({
   value,
   onChange,
   result,
-  onOpenNote,
+  onOpen,
   onViewAllNotes,
 }: ReviewCardProps) {
   const [hoveredNoteId, setHoveredNoteId] = useState<number | null>(null);
@@ -72,7 +72,7 @@ export function ReviewCard({
                 <NotePill
                   key={n.noteId}
                   note={n}
-                  onOpen={onOpenNote}
+                  onOpen={(note) => onOpen?.(note, i)}
                   onHover={setHoveredNoteId}
                   colorIndex={i}
                 />

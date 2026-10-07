@@ -4,7 +4,7 @@ import { noteColor } from "./noteColors";
 
 export type NotePillProps = {
   note: NoteRef;
-  onOpen?: (noteId: number) => void;
+  onOpen?: (note: NoteRef) => void;
   onHover?: (noteId: number | null) => void;
   colorIndex?: number;
 };
@@ -18,7 +18,7 @@ export function NotePill({
   return (
     <button
       type="button"
-      onClick={() => onOpen?.(note.noteId)}
+      onClick={() => onOpen?.(note)}
       onMouseEnter={() => onHover?.(note.noteId)}
       onMouseLeave={() => onHover?.(null)}
       onFocus={() => onHover?.(note.noteId)}

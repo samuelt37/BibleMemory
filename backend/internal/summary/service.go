@@ -110,8 +110,10 @@ func (s *Service) CheckSummary(ctx context.Context, req Request, userID int) ([]
 				}
 				ref.Quote = matchQuote(results[i].Feedback, u.Quote)
 				ref.SummaryQuote = matchQuote(req.Answers[i], u.SummaryQuote)
+				ref.NoteQuote = u.NoteQuote
 				results[i].Notes = append(results[i].Notes, ref)
 			}
+
 		}
 		results[i].NotesUsed = nil
 	}

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Upload, FileText, X, Download, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,7 +9,8 @@ import {
   fetchNoteDownloadURL,
 } from "../api/useNotes";
 import { useAuth } from "@clerk/clerk-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useBooks } from "@/features/review/api/useBooks";
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -31,7 +32,15 @@ function statusLabel(status: string): string {
 }
 
 export function NotesPage() {
-  const { data: notesData, isLoading } = useNotesList();
+  const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const q = params.get("q") ?? "";
+  const book = params.get("book");
+  const chapter = params.get("chapter");
+  const hasFilters = q !== "" || book !== null;
+  const { data: books = [] } = useBooks();
+
+  const { data: notesData, isLoading } = useNotesList({ q, book, chapter });
   const notes = notesData ?? [];
   const { mutate: uploadNote } = useUploadNote();
   const { mutate: uploadTextNote } = useUploadTextNote();
@@ -42,6 +51,41 @@ export function NotesPage() {
   const [pasteMode, setPasteMode] = useState(false);
   const [pasteTitle, setPasteTitle] = useState("");
   const [pasteText, setPasteText] = useState("");
+  const [searchText, setSearchText] = useState(q);
+
+  // write the search text to the URL after a short pause
+  useEffect(() => {
+    if (searchText === q) return;
+    const t = setTimeout(() => {
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (searchText) next.set("q", searchText);
+          else next.delete("q");
+          return next;
+        },
+        { replace: true },
+      );
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchText, q, setParams]);
+
+  const setPassage = (nextBook: string, nextChapter: string) => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (nextBook !== "") next.set("book", nextBook);
+      else next.delete("book");
+      if (nextBook !== "" && nextChapter !== "")
+        next.set("chapter", nextChapter);
+      else next.delete("chapter");
+      return next;
+    });
+  };
+
+  const clearFilters = () => {
+    setSearchText("");
+    setParams({});
+  };
 
   const navigate = useNavigate();
 
@@ -90,6 +134,47 @@ export function NotesPage() {
           />
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="Search notes…"
+            className="rounded-md border px-3 py-1.5 text-sm"
+          />
+          <select
+            value={book ?? ""}
+            onChange={(e) => setPassage(e.target.value, "")}
+            className="rounded-md border bg-background px-2 py-1.5 text-sm"
+          >
+            <option value="">All books</option>
+            {books.map((b) => (
+              <option key={b.id} value={String(b.id)}>
+                {b.book}
+              </option>
+            ))}
+          </select>
+          {book !== null && (
+            <input
+              type="number"
+              min={1}
+              value={chapter ?? ""}
+              onChange={(e) => setPassage(book, e.target.value)}
+              placeholder="Chapter"
+              className="w-24 rounded-md border px-2 py-1.5 text-sm"
+            />
+          )}
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-xs underline text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
         {pasteMode && (
           <div className="p-4 border rounded-lg bg-card flex flex-col gap-2">
             <input
@@ -107,7 +192,11 @@ export function NotesPage() {
               className="rounded-md border p-2 text-sm resize-none"
             />
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setPasteMode(false)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPasteMode(false)}
+              >
                 Cancel
               </Button>
               <Button size="sm" onClick={handlePasteSubmit}>
@@ -121,15 +210,26 @@ export function NotesPage() {
           <p className="text-muted-foreground text-sm">Loading…</p>
         ) : notes.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            No notes yet — upload a file or paste text and we'll match it to relevant verses.
+            {hasFilters
+              ? "No notes match these filters."
+              : "No notes yet — upload a file or paste text and we'll match it to relevant verses."}
           </p>
         ) : (
           <div className="flex flex-col gap-3">
             {notes.map((note) => (
-              <div key={note.id} className="p-4 border rounded-lg bg-card text-card-foreground shadow-xs flex items-center gap-3">
-                <FileText size={20} className="text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0 cursor-pointer"
-                    onClick={() => navigate(`/notes/${note.id}`)}
+              <div
+                key={note.id}
+                className="p-4 border rounded-lg bg-card text-card-foreground shadow-xs flex items-center gap-3"
+              >
+                <FileText
+                  size={20}
+                  className="text-muted-foreground shrink-0"
+                />
+                <div
+                  className="flex-1 min-w-0 cursor-pointer"
+                  onClick={() =>
+                    navigate(`/notes/${note.id}${location.search}`)
+                  }
                 >
                   <p className="text-sm truncate">{note.filename}</p>
                   <p className="text-xs text-muted-foreground">

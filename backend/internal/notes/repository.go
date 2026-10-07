@@ -3,6 +3,7 @@ package notes
 import (
 	"database/sql"
 
+	"github.com/lib/pq"
 	"github.com/pgvector/pgvector-go"
 )
 
@@ -42,11 +43,18 @@ func (r *Repository) CreateTextNote(userID int, filename, text string) (*Note, e
 	return &n, nil
 }
 
-func (r *Repository) ListByUser(userID int) ([]Note, error) {
+func (r *Repository) ListByUser(userID int, f NoteFilter) ([]Note, error) {
 	rows, err := r.db.Query(
-		`SELECT id, user_id, filename, source_type, r2_key, mime_type, file_size, status, created_at, updated_at
-		 FROM notes WHERE user_id = $1 ORDER BY created_at DESC`,
-		userID,
+		`SELECT n.id, n.user_id, n.filename, n.source_type, n.r2_key, n.mime_type, n.file_size, n.status, n.created_at, n.updated_at
+		 FROM notes n
+		 WHERE n.user_id = $1
+		   AND ($2::text = '' OR n.filename ILIKE '%' || $2 || '%' OR n.raw_text ILIKE '%' || $2 || '%')
+		   AND ($3::int IS NULL OR EXISTS (
+		         SELECT 1 FROM note_chunks c
+		         WHERE c.note_id = n.id AND c.book_id = $3
+		           AND ($4::int IS NULL OR c.chapter = $4)))
+		 ORDER BY n.created_at DESC`,
+		userID, f.Query, f.BookID, f.Chapter,
 	)
 	if err != nil {
 		return nil, err
@@ -99,6 +107,31 @@ func (r *Repository) UpdateRawText(noteID int, text string) error {
 		text, noteID,
 	)
 	return err
+}
+
+func (r *Repository) ListByIDs(userID int, ids []int) ([]Note, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := r.db.Query(
+		`SELECT id, user_id, filename, source_type, r2_key, mime_type, file_size, status, created_at, updated_at
+		 FROM notes WHERE user_id = $1 AND id = ANY($2)`,
+		userID, pq.Array(ids),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Note
+	for rows.Next() {
+		var n Note
+		if err := rows.Scan(&n.ID, &n.UserID, &n.Filename, &n.SourceType, &n.R2Key, &n.MimeType, &n.FileSize, &n.Status, &n.CreatedAt, &n.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
 }
 
 type ChunkRepository struct {
@@ -194,4 +227,40 @@ func (r *ChunkRepository) CountByBooks(userID, startBookID, endBookID int) (int,
 		userID, loBook, hiBook,
 	).Scan(&count)
 	return count, err
+}
+
+func (r *ChunkRepository) SearchNoteIDs(
+	userID int,
+	queryEmb []float32,
+	bookID, chapter *int,
+	maxDist float64,
+	limit int,
+) ([]int, error) {
+	rows, err := r.db.Query(
+		`SELECT note_id
+		 FROM note_chunks
+		 WHERE user_id = $1
+		   AND embedding IS NOT NULL
+		   AND ($3::int IS NULL OR book_id = $3)
+		   AND ($4::int IS NULL OR chapter = $4)
+		 GROUP BY note_id
+		 HAVING MIN(embedding <=> $2) <= $5
+		 ORDER BY MIN(embedding <=> $2)
+		 LIMIT $6`,
+		userID, pgvector.NewVector(queryEmb), bookID, chapter, maxDist, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }

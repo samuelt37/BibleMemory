@@ -118,9 +118,59 @@ func (s *Service) CreateTextNote(userID int, title, text string) (*Note, error) 
 	return note, nil
 }
 
-func (s *Service) ListNotes(userID int) ([]Note, error) {
-	return s.repo.ListByUser(userID)
+func (s *Service) ListNotes(ctx context.Context, userID int, f NoteFilter) ([]Note, error) {
+	keyword, err := s.repo.ListByUser(userID, f)
+	if err != nil {
+		return nil, err
+	}
+
+	// no search text: keyword/passage filtering is the whole answer
+	if len(strings.TrimSpace(f.Query)) < 3 {
+		return keyword, nil
+	}
+
+	// meaning-based matches; any failure falls back to keyword results
+	emb, err := EmbedText(ctx, f.Query)
+	if err != nil {
+		log.Printf("ListNotes: embed failed, keyword only: %v", err)
+		return keyword, nil
+	}
+	ids, err := s.chunkRepo.SearchNoteIDs(userID, emb, f.BookID, f.Chapter, searchMaxDist, 20)
+	if err != nil {
+		log.Printf("ListNotes: vector search failed, keyword only: %v", err)
+		return keyword, nil
+	}
+
+	seen := make(map[int]bool, len(keyword))
+	for _, n := range keyword {
+		seen[n.ID] = true
+	}
+	var extraIDs []int
+	for _, id := range ids {
+		if !seen[id] {
+			extraIDs = append(extraIDs, id)
+		}
+	}
+	extra, err := s.repo.ListByIDs(userID, extraIDs)
+	if err != nil {
+		log.Printf("ListNotes: load similar notes failed: %v", err)
+		return keyword, nil
+	}
+	byID := make(map[int]Note, len(extra))
+	for _, n := range extra {
+		byID[n.ID] = n
+	}
+
+	merged := keyword
+	for _, id := range extraIDs { // ranked order from the vector search
+		if n, ok := byID[id]; ok {
+			merged = append(merged, n)
+		}
+	}
+	return merged, nil
 }
+
+const searchMaxDist = 0.45
 
 func (s *Service) GetDownloadURL(ctx context.Context, userID, noteID int) (string, error) {
 	note, err := s.repo.GetByID(userID, noteID)

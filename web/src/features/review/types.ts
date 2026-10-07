@@ -63,4 +63,14 @@ export type NoteRef = {
   title: string; 
   quote?: string; 
   summaryQuote?: string;
+  noteQuote?: string;
+};
+
+export type ReviewUnit = { key: string; label: string; range: BookRange };
+
+export type ChapterResult = { accuracy: number; feedback: string };
+
+type OpenNote = {
+  note: NoteRef;
+  colorIndex: number;
 };

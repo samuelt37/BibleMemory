@@ -4,7 +4,14 @@ import { RangeCard } from "../components/RangeCard";
 import { useBooks } from "../api/useBooks";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/constants/config";
-import type { BookRange, ScriptureRangeDTO, BookInfo } from "../types";
+import type {
+  BookRange,
+  ScriptureRangeDTO,
+  BookInfo,
+  ReviewUnit,
+  ChapterResult,
+  NoteRef,
+} from "../types";
 import { bookRangeToDTO } from "../types";
 import { useReviewSession } from "../context/ReviewSessionContext";
 import { useSaveSession, useSessionHistory } from "../api/useSessions";
@@ -12,19 +19,8 @@ import { SignedOut, SignInButton, useUser, useAuth } from "@clerk/clerk-react";
 import { BookOpen, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { NoteView } from "@/features/notes/components/NoteView";
-
-type ReviewUnit =
-  | {
-      kind: "chapter";
-      key: string;
-      book: string;
-      bookId: number;
-      chapter: number;
-      label: string;
-    }
-  | { kind: "range"; key: string; label: string; range: BookRange };
-
-type ChapterResult = { accuracy: number; feedback: string };
+import { useNavigate } from "react-router-dom";
+import { noteColor } from "@/features/notes/components/noteColors";
 
 function buildReviewUnits(ranges: BookRange[]): ReviewUnit[] {
   const units: ReviewUnit[] = [];
@@ -33,9 +29,11 @@ function buildReviewUnits(ranges: BookRange[]): ReviewUnit[] {
     const pos = (p: BookRange["start"]) =>
       `${p.book} ${p.chapter}${p.verse !== null ? `:${p.verse}` : ""}`;
     units.push({
-      kind: "range",
       key: `range-${r.id}`,
-      label: `${pos(r.start)} \u2013 ${pos(r.end)}`,
+      label:
+        pos(r.start) === pos(r.end)
+          ? pos(r.start)
+          : `${pos(r.start)} \u2013 ${pos(r.end)}`,
       range: r,
     });
   }
@@ -45,6 +43,7 @@ function buildReviewUnits(ranges: BookRange[]): ReviewUnit[] {
 
 export function ReviewPage() {
   const { data: books = [] } = useBooks();
+  const navigate = useNavigate();
 
   const { ranges, setRanges, loadVersion } = useReviewSession();
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -55,7 +54,10 @@ export function ReviewPage() {
   const { getToken } = useAuth();
 
   const [isChecking, setIsChecking] = useState(false);
-  const [openNoteId, setOpenNoteId] = useState<number | null>(null);
+  const [openNote, setOpenNote] = useState<{
+    note: NoteRef;
+    colorIndex: number;
+  } | null>(null);
 
   useEffect(() => {
     setAnswers({});
@@ -119,25 +121,18 @@ export function ReviewPage() {
         }
       }
 
-      const scriptureRanges = reviewUnits.map((u) =>
-        u.kind === "chapter"
-          ? {
-              start: { book: u.bookId, chapter: u.chapter, verse: null },
-              end: { book: u.bookId, chapter: u.chapter, verse: null },
-            }
-          : {
-              start: {
-                book: u.range.start.bookId,
-                chapter: u.range.start.chapter,
-                verse: u.range.start.verse,
-              },
-              end: {
-                book: u.range.end.bookId,
-                chapter: u.range.end.chapter,
-                verse: u.range.end.verse,
-              },
-            },
-      );
+      const scriptureRanges = reviewUnits.map((u) => ({
+        start: {
+          book: u.range.start.bookId,
+          chapter: u.range.start.chapter,
+          verse: u.range.start.verse,
+        },
+        end: {
+          book: u.range.end.bookId,
+          chapter: u.range.end.chapter,
+          verse: u.range.end.verse,
+        },
+      }));
 
       const answersList = reviewUnits.map((u) => answers[u.key] ?? "");
 
@@ -175,6 +170,18 @@ export function ReviewPage() {
     } finally {
       setIsChecking(false);
     }
+  }
+
+  function notesUrlForUnit(u: ReviewUnit) {
+    const { start, end } = u.range;
+    const params = new URLSearchParams({ book: String(start.bookId) });
+
+    // only filter by chapter when the range stays inside one chapter
+    if (start.bookId === end.bookId && start.chapter === end.chapter) {
+      params.set("chapter", String(start.chapter));
+    }
+
+    return `/notes?${params.toString()}`;
   }
 
   return (
@@ -252,17 +259,26 @@ export function ReviewPage() {
                   setAnswers((prev) => ({ ...prev, [u.key]: value }))
                 }
                 result={results[u.key]}
-                onOpenNote={setOpenNoteId}
+                onOpen={(note, colorIndex) => {
+                  setOpenNote({ note, colorIndex });
+                }}
+                onViewAllNotes={() => navigate(notesUrlForUnit(u))}
               />
             ))}
 
             <Dialog
-              open={openNoteId !== null}
-              onOpenChange={(o) => !o && setOpenNoteId(null)}
+              open={openNote !== null}
+              onOpenChange={(o) => !o && setOpenNote(null)}
             >
               <DialogContent className="max-h-[80vh] overflow-y-auto">
                 <DialogTitle className="sr-only">Note</DialogTitle>
-                {openNoteId !== null && <NoteView noteId={openNoteId} />}
+                {openNote && (
+                  <NoteView
+                    noteId={openNote.note.noteId}
+                    highlight={openNote.note.noteQuote}
+                    markClass={noteColor(openNote.colorIndex).mark}
+                  />
+                )}
               </DialogContent>
             </Dialog>
           </div>

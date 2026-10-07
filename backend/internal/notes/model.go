@@ -36,3 +36,9 @@ type ChunkHit struct {
 	Title   string
 	Content string
 }
+
+type NoteFilter struct {
+	Query   string
+	BookID  *int
+	Chapter *int
+}

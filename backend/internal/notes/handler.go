@@ -2,8 +2,10 @@ package notes
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/samuelt37/BibleMemory/internal/auth"
@@ -88,14 +90,37 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	notesList, err := h.service.ListNotes(userID)
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+
+	parseIntPtr := func(key string) *int {
+		v := r.URL.Query().Get(key)
+		if v == "" {
+			return nil
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return nil
+		}
+		return &n
+	}
+
+	notes, err := h.service.ListNotes(r.Context(), userID, NoteFilter{
+		Query:   q,
+		BookID:  parseIntPtr("book"),
+		Chapter: parseIntPtr("chapter"),
+	})
+
 	if err != nil {
-		http.Error(w, "failed to fetch notes", http.StatusInternalServerError)
+		log.Printf("List notes failed for user %d: %v", userID, err)
+		http.Error(w, "failed to list notes", http.StatusInternalServerError)
 		return
+	}
+	if notes == nil {
+		notes = []Note{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(notesList)
+	json.NewEncoder(w).Encode(notes)
 }
 
 func (h *Handler) DownloadURL(w http.ResponseWriter, r *http.Request) {

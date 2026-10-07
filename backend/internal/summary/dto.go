@@ -6,6 +6,7 @@ type NoteUse struct {
 	ID           int    `json:"id"`
 	Quote        string `json:"quote"`
 	SummaryQuote string `json:"summaryQuote,omitempty"`
+	NoteQuote    string `json:"noteQuote"`
 }
 
 type Request struct {
@@ -18,6 +19,7 @@ type NoteRef struct {
 	Title        string `json:"title"`
 	Quote        string `json:"quote,omitempty"`
 	SummaryQuote string `json:"summaryQuote"`
+	NoteQuote    string `json:"noteQuote,omitempty"`
 }
 
 type Result struct {
