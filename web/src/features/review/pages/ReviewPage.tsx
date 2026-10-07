@@ -45,7 +45,7 @@ export function ReviewPage() {
   const { data: books = [] } = useBooks();
   const navigate = useNavigate();
 
-  const { ranges, setRanges, loadVersion } = useReviewSession();
+  const { ranges, setRanges, loadVersion, newRangeId } = useReviewSession();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, ChapterResult>>({});
   const { mutate: saveSession } = useSaveSession();
@@ -62,6 +62,8 @@ export function ReviewPage() {
   useEffect(() => {
     setAnswers({});
     setResults({});
+    setIsChecking(false);
+    setOpenNote(null);
   }, [loadVersion]);
 
   const updateRange = (id: number, patch: Partial<BookRange>) =>
@@ -73,12 +75,12 @@ export function ReviewPage() {
     setRanges((prev) => prev.filter((r) => r.id !== id));
 
   const addRange = (book: BookInfo) => {
-    const nextId = ranges.length ? Math.max(...ranges.map((r) => r.id)) + 1 : 1;
+    const id = newRangeId();
     const pos = { book: book.book, bookId: book.id, chapter: 1, verse: null };
     setRanges((prev) => [
       ...prev,
       {
-        id: nextId,
+        id,
         start: { ...pos },
         end: { ...pos, chapter: book.chapters },
       },

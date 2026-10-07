@@ -1,4 +1,10 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { BookRange } from "../types";
 
 type ReviewSessionContextType = {
@@ -7,6 +13,7 @@ type ReviewSessionContextType = {
   addRangeDirectly: (range: BookRange) => void;
   loadRanges: (ranges: BookRange[]) => void;
   loadVersion: number; // bumps only when loadRanges is called
+  newRangeId: () => number;
 };
 
 const ReviewSessionContext = createContext<ReviewSessionContextType | null>(
@@ -16,22 +23,30 @@ const ReviewSessionContext = createContext<ReviewSessionContextType | null>(
 export function ReviewSessionProvider({ children }: { children: ReactNode }) {
   const [ranges, setRanges] = useState<BookRange[]>([]);
   const [loadVersion, setLoadVersion] = useState(0);
+  const nextIdRef = useRef(1);
+  const newRangeId = () => nextIdRef.current++;
 
   const addRangeDirectly = (range: BookRange) => {
-    setRanges((prev) => {
-      const nextId = prev.length ? Math.max(...prev.map((r) => r.id)) + 1 : 1;
-      return [...prev, { ...range, id: nextId }];
-    });
+    const id = nextIdRef.current++;
+    setRanges((prev) => [...prev, { ...range, id }]);
   };
 
   const loadRanges = (newRanges: BookRange[]) => {
     setRanges(newRanges.map((r, i) => ({ ...r, id: i + 1 })));
+    nextIdRef.current = newRanges.length + 1;
     setLoadVersion((v) => v + 1);
   };
 
   return (
     <ReviewSessionContext.Provider
-      value={{ ranges, setRanges, addRangeDirectly, loadRanges, loadVersion }}
+      value={{
+        ranges,
+        setRanges,
+        addRangeDirectly,
+        loadRanges,
+        loadVersion,
+        newRangeId,
+      }}
     >
       {children}
     </ReviewSessionContext.Provider>
