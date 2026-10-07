@@ -74,7 +74,6 @@ function notesUrlForUnit(u: ReviewUnit) {
 
 export function ReviewPage() {
   const { data: books = [], isPending, isError } = useBooks();
-  const loadingBooks = books.length === 0;
   const navigate = useNavigate();
 
   const {
