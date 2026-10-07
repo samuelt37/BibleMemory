@@ -193,7 +193,11 @@ export function Sidebar() {
       >
         <div className="flex items-center justify-between p-2">
           {open ? (
-            <Link to="/" className="px-2 font-semibold hover:opacity-80">
+            <Link
+              to="/"
+              className="flex items-center gap-2 px-2 font-semibold hover:opacity-80"
+            >
+              <img src="/favicon.svg" alt="" className="size-6 shrink-0" />
               BibleReview
             </Link>
           ) : null}
