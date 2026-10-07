@@ -3,9 +3,11 @@ import {
   useContext,
   useRef,
   useState,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
 } from "react";
-import type { BookRange } from "../types";
+import type { BookRange, ReviewResult } from "../types";
 
 type ReviewSessionContextType = {
   ranges: BookRange[];
@@ -14,6 +16,10 @@ type ReviewSessionContextType = {
   loadRanges: (ranges: BookRange[]) => void;
   loadVersion: number; // bumps only when loadRanges is called
   newRangeId: () => number;
+  answers: Record<string, string>;
+  setAnswers: Dispatch<SetStateAction<Record<string, string>>>;
+  results: Record<string, ReviewResult>;
+  setResults: Dispatch<SetStateAction<Record<string, ReviewResult>>>;
 };
 
 const ReviewSessionContext = createContext<ReviewSessionContextType | null>(
@@ -26,6 +32,9 @@ export function ReviewSessionProvider({ children }: { children: ReactNode }) {
   const nextIdRef = useRef(1);
   const newRangeId = () => nextIdRef.current++;
 
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [results, setResults] = useState<Record<string, ReviewResult>>({});
+
   const addRangeDirectly = (range: BookRange) => {
     const id = nextIdRef.current++;
     setRanges((prev) => [...prev, { ...range, id }]);
@@ -34,6 +43,8 @@ export function ReviewSessionProvider({ children }: { children: ReactNode }) {
   const loadRanges = (newRanges: BookRange[]) => {
     setRanges(newRanges.map((r, i) => ({ ...r, id: i + 1 })));
     nextIdRef.current = newRanges.length + 1;
+    setAnswers({});
+    setResults({});
     setLoadVersion((v) => v + 1);
   };
 
@@ -46,6 +57,10 @@ export function ReviewSessionProvider({ children }: { children: ReactNode }) {
         loadRanges,
         loadVersion,
         newRangeId,
+        answers,
+        setAnswers,
+        results,
+        setResults,
       }}
     >
       {children}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ReviewCard } from "../components/ReviewCard";
 import { RangeCard } from "../components/RangeCard";
 import { useBooks } from "../api/useBooks";
@@ -9,8 +9,8 @@ import type {
   ScriptureRangeDTO,
   BookInfo,
   ReviewUnit,
-  ChapterResult,
   NoteRef,
+  ReviewResult,
 } from "../types";
 import { bookRangeToDTO } from "../types";
 import { useReviewSession } from "../context/ReviewSessionContext";
@@ -24,10 +24,9 @@ import { noteColor } from "@/features/notes/components/noteColors";
 
 function buildReviewUnits(ranges: BookRange[]): ReviewUnit[] {
   const units: ReviewUnit[] = [];
-
+  const pos = (p: BookRange["start"]) =>
+    `${p.book} ${p.chapter}${p.verse !== null ? `:${p.verse}` : ""}`;
   for (const r of ranges) {
-    const pos = (p: BookRange["start"]) =>
-      `${p.book} ${p.chapter}${p.verse !== null ? `:${p.verse}` : ""}`;
     units.push({
       key: `range-${r.id}`,
       label:
@@ -41,38 +40,106 @@ function buildReviewUnits(ranges: BookRange[]): ReviewUnit[] {
   return units;
 }
 
+function rangesSignature(ranges: BookRange[]): string {
+  return ranges
+    .map(
+      (r) =>
+        `${r.start.bookId}:${r.start.chapter}:${r.start.verse ?? ""}-${r.end.bookId}:${r.end.chapter}:${r.end.verse ?? ""}`,
+    )
+    .sort()
+    .join("|");
+}
+
+function sessionSignatureFromDTO(ranges: ScriptureRangeDTO[]): string {
+  return ranges
+    .map(
+      (r) =>
+        `${r.startBookId}:${r.startChapter}:${r.startVerse ?? ""}-${r.endBookId}:${r.endChapter}:${r.endVerse ?? ""}`,
+    )
+    .sort()
+    .join("|");
+}
+
+function notesUrlForUnit(u: ReviewUnit) {
+  const { start, end } = u.range;
+  const params = new URLSearchParams({ book: String(start.bookId) });
+
+  // only filter by chapter when the range stays inside one chapter
+  if (start.bookId === end.bookId && start.chapter === end.chapter) {
+    params.set("chapter", String(start.chapter));
+  }
+
+  return `/notes?${params.toString()}`;
+}
+
 export function ReviewPage() {
   const { data: books = [] } = useBooks();
   const navigate = useNavigate();
 
-  const { ranges, setRanges, loadVersion, newRangeId } = useReviewSession();
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [results, setResults] = useState<Record<string, ChapterResult>>({});
+  const {
+    ranges,
+    setRanges,
+    loadVersion,
+    newRangeId,
+    answers,
+    setAnswers,
+    results,
+    setResults,
+  } = useReviewSession();
   const { mutate: saveSession } = useSaveSession();
   const { data: history = [] } = useSessionHistory();
   const { isSignedIn } = useUser();
   const { getToken } = useAuth();
 
+  const reviewUnits = buildReviewUnits(ranges);
+
   const [isChecking, setIsChecking] = useState(false);
+
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const liveKeysRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    liveKeysRef.current = new Set(reviewUnits.map((u) => u.key));
+  });
+
+  useEffect(() => {
+    if (reviewUnits.length === 0) abortRef.current?.abort();
+  }, [reviewUnits.length]);
+
   const [openNote, setOpenNote] = useState<{
     note: NoteRef;
     colorIndex: number;
   } | null>(null);
 
   useEffect(() => {
-    setAnswers({});
-    setResults({});
+    abortRef.current?.abort();
     setIsChecking(false);
     setOpenNote(null);
   }, [loadVersion]);
 
-  const updateRange = (id: number, patch: Partial<BookRange>) =>
+  const updateRange = (id: number, patch: Partial<BookRange>) => {
+    abortRef.current?.abort();
     setRanges((prev) =>
       prev.map((r) => (r.id === id ? { ...r, ...patch } : r)),
     );
+    setResults((prev) => {
+      const { [`range-${id}`]: _removed, ...rest } = prev;
+      return rest;
+    });
+  };
 
-  const removeRange = (id: number) =>
+  const removeRange = (id: number) => {
     setRanges((prev) => prev.filter((r) => r.id !== id));
+    const key = `range-${id}`;
+    const without = <T,>(prev: Record<string, T>) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    };
+    setAnswers(without);
+    setResults(without);
+  };
 
   const addRange = (book: BookInfo) => {
     const id = newRangeId();
@@ -87,30 +154,14 @@ export function ReviewPage() {
     ]);
   };
 
-  const reviewUnits = buildReviewUnits(ranges);
-
-  function rangesSignature(ranges: BookRange[]): string {
-    return ranges
-      .map(
-        (r) =>
-          `${r.start.bookId}:${r.start.chapter}:${r.start.verse ?? ""}-${r.end.bookId}:${r.end.chapter}:${r.end.verse ?? ""}`,
-      )
-      .sort()
-      .join("|");
-  }
-
-  function sessionSignatureFromDTO(ranges: ScriptureRangeDTO[]): string {
-    return ranges
-      .map(
-        (r) =>
-          `${r.startBookId}:${r.startChapter}:${r.startVerse ?? ""}-${r.endBookId}:${r.endChapter}:${r.endVerse ?? ""}`,
-      )
-      .sort()
-      .join("|");
-  }
-
   async function handleCheckAll() {
+    if (reviewUnits.length === 0) return;
+
+    abortRef.current?.abort(); // a newer check replaces an older one
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsChecking(true);
+
     try {
       if (isSignedIn) {
         const signature = rangesSignature(ranges);
@@ -139,7 +190,6 @@ export function ReviewPage() {
       const answersList = reviewUnits.map((u) => answers[u.key] ?? "");
 
       const token = isSignedIn ? await getToken() : null;
-      console.log("[ReviewPage] isSignedIn:", isSignedIn, "hasToken:", !!token);
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
@@ -154,6 +204,7 @@ export function ReviewPage() {
           scripture: { translation: "KJV", ranges: scriptureRanges },
           answers: answersList,
         }),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
@@ -161,29 +212,26 @@ export function ReviewPage() {
         return;
       }
 
-      const resultsList: ChapterResult[] = await res.json();
+      const resultsList: ReviewResult[] = await res.json();
 
-      const resultsByUnit: Record<string, ChapterResult> = {};
+      const resultsByUnit: Record<string, ReviewResult> = {};
       reviewUnits.forEach((u, i) => {
-        resultsByUnit[u.key] = resultsList[i];
+        if (resultsList[i]) resultsByUnit[u.key] = resultsList[i];
       });
 
-      setResults(resultsByUnit);
+      setResults((prev) => {
+        const next = { ...prev };
+        for (const [key, value] of Object.entries(resultsByUnit)) {
+          if (liveKeysRef.current.has(key)) next[key] = value; // skip closed cards
+        }
+        return next;
+      });
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return; // cancelled on purpose
+      console.error("Check failed:", e);
     } finally {
-      setIsChecking(false);
+      if (abortRef.current === controller) setIsChecking(false);
     }
-  }
-
-  function notesUrlForUnit(u: ReviewUnit) {
-    const { start, end } = u.range;
-    const params = new URLSearchParams({ book: String(start.bookId) });
-
-    // only filter by chapter when the range stays inside one chapter
-    if (start.bookId === end.bookId && start.chapter === end.chapter) {
-      params.set("chapter", String(start.chapter));
-    }
-
-    return `/notes?${params.toString()}`;
   }
 
   return (
