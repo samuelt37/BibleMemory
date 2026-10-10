@@ -17,15 +17,12 @@ type Note struct {
 }
 
 type Chunk struct {
-	ID         int    `json:"id"`
-	NoteID     int    `json:"noteId"`
-	UserID     int    `json:"-"`
-	Content    string `json:"content"`
-	BookID     *int   `json:"bookId"`
-	Chapter    *int   `json:"chapter"`
-	VerseStart *int   `json:"verseStart"`
-	VerseEnd   *int   `json:"verseEnd"`
-	Confirmed  bool   `json:"confirmed"`
+	ID        int        `json:"id"`
+	NoteID    int        `json:"noteId"`
+	UserID    int        `json:"-"`
+	Content   string     `json:"content"`
+	Refs      []verseRef `json:"refs"`
+	Confirmed bool       `json:"confirmed"`
 }
 
 type NoteChunk = Chunk

@@ -80,7 +80,7 @@ func chunkText(text string, targetWords int) []string {
 
 func matchChunkToVerse(ctx context.Context, client *gemini.Client, chunk string, bookList string) (*chunkMatch, error) {
 	prompt := fmt.Sprintf(
-		`Given this note text, identify every Bible passage it clearly discusses.
+		`Given this note text, identify every Bible passage it discusses or clearly alludes to.
 		Books (id:name): %s
 
 		Note text:
@@ -90,8 +90,9 @@ func matchChunkToVerse(ctx context.Context, client *gemini.Client, chunk string,
 		{"refs": [{"bookId": <int>, "chapter": <int or null>, "verseStart": <int or null>, "verseEnd": <int or null>}]}
 
 		Rules:
-		- One object per distinct passage. Most chunks have one; use more only if the text clearly covers several. At most 5.
-		- bookId is required. Use null for chapter/verseStart/verseEnd if the text only refers to a whole book or chapter.
+		- One object per distinct passage, at most 5. Most chunks have one or two.
+		- Include passages the text names, and also passages it clearly alludes to even when not named (e.g. a note about Esau selling his birthright may also point to Hebrews 12:16-17).
+		- bookId is required. Use null for chapter/verseStart/verseEnd if the text only refers to a whole book or whole chapter.
 		- Only set verseStart/verseEnd when chapter is set. For a single verse, set both to the same number.
 		- If the text isn't clearly about a specific passage, return {"refs": []}.`,
 		bookList, chunk,

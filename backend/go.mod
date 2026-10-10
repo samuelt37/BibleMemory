@@ -6,7 +6,10 @@ require github.com/go-chi/chi/v5 v5.3.1
 
 require github.com/lib/pq v1.12.3
 
-require github.com/pgvector/pgvector-go v0.4.1 // indirect
+require (
+	github.com/pgvector/pgvector-go v0.4.1 // indirect
+	golang.org/x/time v0.16.0 // indirect
+)
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.47.0 // indirect

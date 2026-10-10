@@ -3,6 +3,7 @@ package notes
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -11,10 +12,16 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/google/uuid"
 	"github.com/samuelt37/BibleMemory/internal/gemini"
 	"github.com/samuelt37/BibleMemory/internal/scripture"
 	"github.com/samuelt37/BibleMemory/internal/storage"
+)
+
+var (
+	ErrNotFound = errors.New("not found")
 )
 
 type Service struct {
@@ -26,6 +33,7 @@ type Service struct {
 
 	bookListCache   string
 	bookListCacheMu sync.Mutex
+	matchLimiter    *rate.Limiter
 }
 
 func NewService(repo *Repository, chunkRepo *ChunkRepository, scriptureRepo *scripture.Repository, r2 *storage.R2Client) *Service {
@@ -35,6 +43,7 @@ func NewService(repo *Repository, chunkRepo *ChunkRepository, scriptureRepo *scr
 		scriptureRepo: scriptureRepo,
 		r2:            r2,
 		gemini:        gemini.NewClient(),
+		matchLimiter:  rate.NewLimiter(rate.Every(5*time.Second), 2),
 	}
 }
 
@@ -230,7 +239,7 @@ func (s *Service) ProcessNote(ctx context.Context, userID, noteID int) error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			match, err := matchChunkToVerse(ctx, s.gemini, c, bookList)
+			match, err := s.matchChunk(ctx, c, bookList)
 			if err != nil {
 				results[idx] = chunkResult{content: c, err: err}
 				return
@@ -285,4 +294,72 @@ func validRefs(refs []verseRef) []verseRef {
 		out = append(out, r)
 	}
 	return out
+}
+
+func (s *Service) ReRefNotes(ctx context.Context, userID, noteID int) error {
+	note, err := s.repo.GetByID(userID, noteID)
+	if err != nil {
+		return err
+	}
+	if note == nil {
+		return err
+	}
+
+	chunks, err := s.chunkRepo.ListByNote(noteID)
+	if err != nil {
+		return err
+	}
+	if len(chunks) == 0 {
+		return fmt.Errorf("note doesn't exist or isn't theirs")
+	}
+
+	bookList, err := s.buildBookList()
+	if err != nil {
+		s.repo.UpdateStatus(noteID, "failed")
+		return err
+	}
+
+	for _, c := range chunks {
+		match, err := s.matchChunk(ctx, c.Content, bookList)
+		if err != nil || match == nil {
+			return fmt.Errorf("chunk %d: %w", c.ID, err) // leave remaining chunks untouched
+		}
+
+		if err := s.chunkRepo.ReplaceRefs(userID, noteID, c.ID, validRefs(match.Refs)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var ErrRateLimited = errors.New("gemini rate limited")
+
+func (s *Service) matchChunk(ctx context.Context, content, bookList string) (*chunkMatch, error) {
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := s.matchLimiter.Wait(ctx); err != nil {
+			return nil, err
+		}
+		match, err := matchChunkToVerse(ctx, s.gemini, content, bookList)
+		if err == nil {
+			return match, nil
+		}
+
+		if !isRateLimited(err) {
+			return nil, err
+		}
+		if attempt == 0 {
+			// Google said to retry in ~50s; wait it out once
+			select {
+			case <-time.After(55 * time.Second):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+	}
+	return nil, ErrRateLimited
+}
+
+func isRateLimited(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "RESOURCE_EXHAUSTED") || strings.Contains(msg, "429")
 }

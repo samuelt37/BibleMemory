@@ -60,7 +60,7 @@ func (s *Service) CheckSummary(ctx context.Context, req Request, userID int) ([]
 			}
 
 			// Fast path: fetch chunks by recency (<2ms DB query)
-			chunks, err := s.chunkRepo.FindRelevant(userID, rng.Start.Book, endBook, nil)
+			chunks, err := s.chunkRepo.FindReferences(userID, rng.Start.Book, endBook, nil)
 			if err != nil {
 				log.Printf("CheckSummary: error finding notes for user %d (books %d-%d): %v", userID, rng.Start.Book, endBook, err)
 			} else {
@@ -69,7 +69,7 @@ func (s *Service) CheckSummary(ctx context.Context, req Request, userID int) ([]
 					if total, _ := s.chunkRepo.CountByBooks(userID, rng.Start.Book, endBook); total > 5 {
 						emb, err := s.gemini.EmbedText(ctx, passages[i], 768)
 						if err == nil && emb != nil {
-							if vecChunks, err := s.chunkRepo.FindRelevant(userID, rng.Start.Book, endBook, emb); err == nil && len(vecChunks) > 0 {
+							if vecChunks, err := s.chunkRepo.FindReferences(userID, rng.Start.Book, endBook, emb); err == nil && len(vecChunks) > 0 {
 								chunks = vecChunks
 							}
 						}

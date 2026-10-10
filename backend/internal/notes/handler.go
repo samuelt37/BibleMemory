@@ -2,6 +2,7 @@ package notes
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -24,8 +25,10 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/notes/text", h.UploadText)
 	r.Get("/notes", h.List)
 	r.Get("/notes/{id}/download", h.DownloadURL)
+	r.Get("/notes/{id}/chunks", h.ListChunks)
 	r.Delete("/notes/{id}", h.Delete)
 	r.Get("/notes/{id}", h.Get)
+	r.Post("/notes/{id}/rereference", h.ReRefNotes)
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
@@ -195,4 +198,67 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		"status":     note.Status,
 		"createdAt":  note.CreatedAt,
 	})
+}
+
+func (h *Handler) ListChunks(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	noteID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid note id", http.StatusBadRequest)
+		return
+	}
+
+	// ownership check, since ListByNote only filters on note id
+	note, err := h.service.repo.GetByID(userID, noteID)
+	if err != nil {
+		http.Error(w, "failed to load note", http.StatusInternalServerError)
+		return
+	}
+	if note == nil {
+		http.Error(w, "note not found", http.StatusNotFound)
+		return
+	}
+
+	chunks, err := h.service.chunkRepo.ListByNote(noteID)
+	if err != nil {
+		log.Printf("list chunks note=%d: %v", noteID, err)
+		http.Error(w, "failed to load chunks", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(chunks)
+}
+
+func (h *Handler) ReRefNotes(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	noteID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid note id", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.service.ReRefNotes(r.Context(), userID, noteID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			http.Error(w, "note not found", http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, ErrRateLimited) {
+			http.Error(w, "Too many requests to the AI service. Try again in a minute.", http.StatusTooManyRequests)
+			return
+		}
+		log.Printf("rereference note=%d user=%d: %v", noteID, userID, err)
+		http.Error(w, "rereference failed", http.StatusBadGateway)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

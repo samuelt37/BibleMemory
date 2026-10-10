@@ -2,6 +2,7 @@ package notes
 
 import (
 	"database/sql"
+	"encoding/json"
 
 	"github.com/lib/pq"
 	"github.com/pgvector/pgvector-go"
@@ -181,11 +182,20 @@ func (r *ChunkRepository) Create(userID, noteID int, content string, embedding [
 
 func (r *ChunkRepository) ListByNote(noteID int) ([]Chunk, error) {
 	rows, err := r.db.Query(
-		`SELECT c.id, c.note_id, c.content,
-			cr.book_id, cr.chapter, cr.verse_start, cr.verse_end, c.confirmed
-		FROM note_chunks c
-		LEFT JOIN chunk_refs cr ON cr.chunk_id = c.id
-		WHERE c.note_id = $1`,
+		`SELECT c.id, c.note_id, c.content, c.confirmed,
+		        COALESCE(
+		          json_agg(json_build_object(
+		            'id', cr.id, 'bookId', cr.book_id, 'chapter', cr.chapter,
+		            'verseStart', cr.verse_start, 'verseEnd', cr.verse_end,
+		            'source', cr.source
+		          ) ORDER BY cr.id) FILTER (WHERE cr.id IS NOT NULL),
+		          '[]'
+		        )
+		 FROM note_chunks c
+		 LEFT JOIN chunk_refs cr ON cr.chunk_id = c.id
+		 WHERE c.note_id = $1
+		 GROUP BY c.id
+		 ORDER BY c.id`,
 		noteID,
 	)
 	if err != nil {
@@ -193,10 +203,14 @@ func (r *ChunkRepository) ListByNote(noteID int) ([]Chunk, error) {
 	}
 	defer rows.Close()
 
-	var chunks []Chunk
+	chunks := []Chunk{}
 	for rows.Next() {
 		var c Chunk
-		if err := rows.Scan(&c.ID, &c.NoteID, &c.Content, &c.BookID, &c.Chapter, &c.VerseStart, &c.VerseEnd, &c.Confirmed); err != nil {
+		var raw []byte
+		if err := rows.Scan(&c.ID, &c.NoteID, &c.Content, &c.Confirmed, &raw); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(raw, &c.Refs); err != nil {
 			return nil, err
 		}
 		chunks = append(chunks, c)
@@ -204,7 +218,7 @@ func (r *ChunkRepository) ListByNote(noteID int) ([]Chunk, error) {
 	return chunks, rows.Err()
 }
 
-func (r *ChunkRepository) FindRelevant(userID, startBookID, endBookID int, queryEmb []float32) ([]ChunkHit, error) {
+func (r *ChunkRepository) FindReferences(userID, startBookID, endBookID int, queryEmb []float32) ([]ChunkHit, error) {
 	loBook, hiBook := startBookID, endBookID
 	if hiBook < loBook {
 		loBook, hiBook = hiBook, loBook
