@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { noteColor } from "@/features/notes/components/noteColors";
-import { NotePill } from "@/features/notes/components/NotePill";
-import type { NoteRef, ReviewResult } from "../types";
-import { HighlightedTextarea } from "@/features/notes/components/HighlightedTextarea";
+import { refColor } from "@/features/references/lib/refColors";
+import { RefPill } from "@/features/references/components/RefPill";
+import type { ReviewResult } from "../types";
+import { HighlightedTextarea } from "@/features/references/components/HighlightedTextarea";
+import type { NoteRef } from "@/features/references/types";
 
 type ReviewCardProps = {
   sectionTitle: string;
@@ -49,7 +50,7 @@ export function ReviewCard({
         value={value}
         onChange={onChange}
         highlight={hovered?.summaryQuote}
-        markClass={hovered ? noteColor(hoveredIndex).mark : undefined}
+        markClass={hovered ? refColor(hoveredIndex).mark : undefined}
       />
 
       {result && (
@@ -61,7 +62,7 @@ export function ReviewCard({
             {renderFeedback(
               result.feedback,
               hovered?.quote,
-              hovered ? noteColor(hoveredIndex).mark : undefined,
+              hovered ? refColor(hoveredIndex).mark : undefined,
             )}
           </p>
 
@@ -69,7 +70,7 @@ export function ReviewCard({
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">Ref:</span>
               {result.notes.map((n, i) => (
-                <NotePill
+                <RefPill
                   key={n.noteId}
                   note={n}
                   onOpen={(note) => onOpen?.(note, i)}

@@ -1,3 +1,5 @@
+import type { NoteRef } from "../references/types";
+
 export type BookInfo = {
   id: number;
   book: string;
@@ -56,14 +58,6 @@ export type ReviewResult = {
   accuracy: number;
   feedback: string;
   notes?: NoteRef[];
-};
-
-export type NoteRef = { 
-  noteId: number; 
-  title: string; 
-  quote?: string; 
-  summaryQuote?: string;
-  noteQuote?: string;
 };
 
 export type ReviewUnit = { key: string; label: string; range: BookRange };

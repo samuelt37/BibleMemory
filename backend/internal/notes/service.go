@@ -219,13 +219,6 @@ func (s *Service) ProcessNote(ctx context.Context, userID, noteID int) error {
 		return err
 	}
 
-	type chunkResult struct {
-		content   string
-		match     *chunkMatch
-		embedding []float32
-		err       error
-	}
-
 	results := make([]chunkResult, len(chunks))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4)
@@ -258,7 +251,7 @@ func (s *Service) ProcessNote(ctx context.Context, userID, noteID int) error {
 			s.repo.UpdateStatus(noteID, "failed")
 			return r.err
 		}
-		if err := s.chunkRepo.Create(userID, noteID, r.content, r.embedding, r.match.BookID, r.match.Chapter, r.match.VerseStart, r.match.VerseEnd); err != nil {
+		if err := s.chunkRepo.Create(userID, noteID, r.content, r.embedding, validRefs(r.match.Refs)); err != nil {
 			log.Println("ProcessNote: insert failed for chunk", i, ":", err)
 			s.repo.UpdateStatus(noteID, "failed")
 			return err
@@ -275,4 +268,21 @@ func (s *Service) GetNote(userID, noteID int) (*Note, error) {
 
 func (s *Service) EmbedText(ctx context.Context, text string) ([]float32, error) {
 	return s.gemini.EmbedText(ctx, text, 768)
+}
+
+func validRefs(refs []verseRef) []verseRef {
+	out := make([]verseRef, 0, len(refs))
+	for _, r := range refs {
+		if r.BookID == nil {
+			continue
+		}
+		if r.Chapter == nil && (r.VerseStart != nil || r.VerseEnd != nil) {
+			continue
+		}
+		if r.VerseStart != nil && r.VerseEnd != nil && *r.VerseEnd < *r.VerseStart {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
 }

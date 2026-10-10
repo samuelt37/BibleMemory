@@ -1,5 +1,5 @@
-// features/notes/components/noteColors.ts
-export const NOTE_COLORS = [
+// features/references/components/noteColors.ts
+export const REF_COLORS = [
   {
     pill: "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300",
     mark: "bg-blue-200/70 dark:bg-blue-500/30",
@@ -14,6 +14,6 @@ export const NOTE_COLORS = [
   },
 ];
 
-export function noteColor(index: number) {
-  return NOTE_COLORS[index % NOTE_COLORS.length];
+export function refColor(index: number) {
+  return REF_COLORS[index % REF_COLORS.length];
 }

@@ -42,3 +42,21 @@ type NoteFilter struct {
 	BookID  *int
 	Chapter *int
 }
+
+type verseRef struct {
+	BookID     *int `json:"bookId"`
+	Chapter    *int `json:"chapter"`
+	VerseStart *int `json:"verseStart"`
+	VerseEnd   *int `json:"verseEnd"`
+}
+
+type chunkMatch struct {
+	Refs []verseRef `json:"refs"`
+}
+
+type chunkResult struct {
+	content   string
+	match     *chunkMatch
+	embedding []float32
+	err       error
+}

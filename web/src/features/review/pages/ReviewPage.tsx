@@ -9,7 +9,6 @@ import type {
   ScriptureRangeDTO,
   BookInfo,
   ReviewUnit,
-  NoteRef,
   ReviewResult,
 } from "../types";
 import { bookRangeToDTO } from "../types";
@@ -20,7 +19,8 @@ import { BookOpen, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { NoteView } from "@/features/notes/components/NoteView";
 import { useNavigate } from "react-router-dom";
-import { noteColor } from "@/features/notes/components/noteColors";
+import { refColor } from "@/features/references/lib/refColors";
+import type { NoteRef } from "@/features/references/types";
 
 function buildReviewUnits(ranges: BookRange[]): ReviewUnit[] {
   const units: ReviewUnit[] = [];
@@ -336,7 +336,7 @@ export function ReviewPage() {
                   <NoteView
                     noteId={openNote.note.noteId}
                     highlight={openNote.note.noteQuote}
-                    markClass={noteColor(openNote.colorIndex).mark}
+                    markClass={refColor(openNote.colorIndex).mark}
                   />
                 )}
               </DialogContent>

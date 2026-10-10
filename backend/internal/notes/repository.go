@@ -46,14 +46,14 @@ func (r *Repository) CreateTextNote(userID int, filename, text string) (*Note, e
 func (r *Repository) ListByUser(userID int, f NoteFilter) ([]Note, error) {
 	rows, err := r.db.Query(
 		`SELECT n.id, n.user_id, n.filename, n.source_type, n.r2_key, n.mime_type, n.file_size, n.status, n.created_at, n.updated_at
-		 FROM notes n
-		 WHERE n.user_id = $1
-		   AND ($2::text = '' OR n.filename ILIKE '%' || $2 || '%' OR n.raw_text ILIKE '%' || $2 || '%')
-		   AND ($3::int IS NULL OR EXISTS (
-		         SELECT 1 FROM note_chunks c
-		         WHERE c.note_id = n.id AND c.book_id = $3
-		           AND ($4::int IS NULL OR c.chapter = $4)))
-		 ORDER BY n.created_at DESC`,
+		FROM notes n
+		WHERE n.user_id = $1
+		AND ($2::text = '' OR n.filename ILIKE '%' || $2 || '%' OR n.raw_text ILIKE '%' || $2 || '%')
+		AND ($3::int IS NULL OR EXISTS (
+				SELECT 1 FROM chunk_refs cr
+				WHERE cr.note_id = n.id AND cr.book_id = $3
+				AND ($4::int IS NULL OR cr.chapter = $4)))
+		ORDER BY n.created_at DESC`,
 		userID, f.Query, f.BookID, f.Chapter,
 	)
 	if err != nil {
@@ -142,19 +142,50 @@ func NewChunkRepository(db *sql.DB) *ChunkRepository {
 	return &ChunkRepository{db: db}
 }
 
-func (r *ChunkRepository) Create(userID, noteID int, content string, embedding []float32, bookID, chapter, verseStart, verseEnd *int) error {
-	_, err := r.db.Exec(
-		`INSERT INTO note_chunks (note_id, user_id, content, embedding, book_id, chapter, verse_start, verse_end)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		noteID, userID, content, pgvector.NewVector(embedding), bookID, chapter, verseStart, verseEnd,
-	)
-	return err
+func (r *ChunkRepository) Create(userID, noteID int, content string, embedding []float32, refs []verseRef) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+
+	var chunkID int
+	err = tx.QueryRow(
+		`INSERT INTO note_chunks (note_id, user_id, content, embedding)
+		 VALUES ($1, $2, $3, $4)
+		 RETURNING id`,
+		noteID, userID, content, pgvector.NewVector(embedding),
+	).Scan(&chunkID)
+	if err != nil {
+		return err
+	}
+
+	// only tagged chunks get a ref row
+	for _, ref := range refs {
+		if ref.BookID == nil {
+			continue
+		}
+		_, err = tx.Exec(
+			`INSERT INTO chunk_refs (user_id, note_id, chunk_id, book_id, chapter, verse_start, verse_end)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			 ON CONFLICT DO NOTHING`,
+			userID, noteID, chunkID, *ref.BookID, ref.Chapter, ref.VerseStart, ref.VerseEnd,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (r *ChunkRepository) ListByNote(noteID int) ([]Chunk, error) {
 	rows, err := r.db.Query(
-		`SELECT id, note_id, content, book_id, chapter, verse_start, verse_end, confirmed
-		 FROM note_chunks WHERE note_id = $1`,
+		`SELECT c.id, c.note_id, c.content,
+			cr.book_id, cr.chapter, cr.verse_start, cr.verse_end, c.confirmed
+		FROM note_chunks c
+		LEFT JOIN chunk_refs cr ON cr.chunk_id = c.id
+		WHERE c.note_id = $1`,
 		noteID,
 	)
 	if err != nil {
@@ -180,19 +211,23 @@ func (r *ChunkRepository) FindRelevant(userID, startBookID, endBookID int, query
 	}
 
 	query := `SELECT c.id, c.note_id, n.filename, c.content
-          FROM note_chunks c
-          JOIN notes n ON n.id = c.note_id
-          WHERE c.user_id = $1 AND c.book_id BETWEEN $2 AND $3
-          ORDER BY c.created_at DESC
-          LIMIT 5`
+			FROM note_chunks c
+			JOIN notes n ON n.id = c.note_id
+			WHERE c.user_id = $1
+			AND EXISTS (SELECT 1 FROM chunk_refs cr
+						WHERE cr.chunk_id = c.id AND cr.book_id BETWEEN $2 AND $3)
+			ORDER BY c.created_at DESC
+			LIMIT 5`
 	args := []any{userID, loBook, hiBook}
 
 	if queryEmb != nil {
 		query = `SELECT c.id, c.note_id, n.filename, c.content
 	         FROM note_chunks c
 	         JOIN notes n ON n.id = c.note_id
-	         WHERE c.user_id = $1 AND c.book_id BETWEEN $2 AND $3
-	           AND c.embedding IS NOT NULL
+	         WHERE c.user_id = $1 
+			 AND EXISTS (SELECT 1 FROM chunk_refs cr
+						WHERE cr.chunk_id = c.id AND cr.book_id BETWEEN $2 AND $3)
+	         AND c.embedding IS NOT NULL
 	         ORDER BY c.embedding <=> $4
 	         LIMIT 5`
 		args = append(args, pgvector.NewVector(queryEmb))
@@ -223,7 +258,11 @@ func (r *ChunkRepository) CountByBooks(userID, startBookID, endBookID int) (int,
 
 	var count int
 	err := r.db.QueryRow(
-		`SELECT count(*) FROM note_chunks WHERE user_id = $1 AND book_id BETWEEN $2 AND $3`,
+		`SELECT count(*) 
+		FROM note_chunks c
+		WHERE user_id = $1 
+		AND EXISTS (SELECT 1 FROM chunk_refs cr
+						WHERE cr.chunk_id = c.id AND cr.book_id BETWEEN $2 AND $3)`,
 		userID, loBook, hiBook,
 	).Scan(&count)
 	return count, err
@@ -237,16 +276,19 @@ func (r *ChunkRepository) SearchNoteIDs(
 	limit int,
 ) ([]int, error) {
 	rows, err := r.db.Query(
-		`SELECT note_id
-		 FROM note_chunks
-		 WHERE user_id = $1
-		   AND embedding IS NOT NULL
-		   AND ($3::int IS NULL OR book_id = $3)
-		   AND ($4::int IS NULL OR chapter = $4)
-		 GROUP BY note_id
-		 HAVING MIN(embedding <=> $2) <= $5
-		 ORDER BY MIN(embedding <=> $2)
-		 LIMIT $6`,
+		`SELECT c.note_id
+		FROM note_chunks c
+		WHERE c.user_id = $1
+		AND c.embedding IS NOT NULL
+		AND ($3::int IS NULL OR EXISTS (
+				SELECT 1 FROM chunk_refs cr
+				WHERE cr.chunk_id = c.id
+				AND cr.book_id = $3
+				AND ($4::int IS NULL OR cr.chapter = $4)))
+		GROUP BY c.note_id
+		HAVING MIN(c.embedding <=> $2) <= $5
+		ORDER BY MIN(c.embedding <=> $2)
+		LIMIT $6`,
 		userID, pgvector.NewVector(queryEmb), bookID, chapter, maxDist, limit,
 	)
 	if err != nil {
@@ -263,4 +305,30 @@ func (r *ChunkRepository) SearchNoteIDs(
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+func (r *ChunkRepository) ReplaceRefs(userID, noteID, chunkID int, refs []verseRef) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err = tx.Exec(`DELETE FROM chunk_refs WHERE chunk_id = $1 AND source = 'auto'`, chunkID); err != nil {
+		return err
+	}
+	for _, ref := range refs {
+		if ref.BookID == nil {
+			continue
+		}
+		if _, err = tx.Exec(
+			`INSERT INTO chunk_refs (user_id, note_id, chunk_id, book_id, chapter, verse_start, verse_end)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			 ON CONFLICT DO NOTHING`,
+			userID, noteID, chunkID, *ref.BookID, ref.Chapter, ref.VerseStart, ref.VerseEnd,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

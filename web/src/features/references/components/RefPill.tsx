@@ -1,20 +1,20 @@
-// NotePill.tsx
-import type { NoteRef } from "@/features/review";
-import { noteColor } from "./noteColors";
+// RefPill.tsx
+import { refColor } from "../lib/refColors";
+import type { NoteRef } from "../types";
 
-export type NotePillProps = {
+export type RefPillProps = {
   note: NoteRef;
   onOpen?: (note: NoteRef) => void;
   onHover?: (noteId: number | null) => void;
   colorIndex?: number;
 };
 
-export function NotePill({
+export function RefPill({
   note,
   onOpen,
   onHover,
   colorIndex = 0,
-}: NotePillProps) {
+}: RefPillProps) {
   return (
     <button
       type="button"
@@ -23,7 +23,7 @@ export function NotePill({
       onMouseLeave={() => onHover?.(null)}
       onFocus={() => onHover?.(note.noteId)}
       onBlur={() => onHover?.(null)}
-      className={`rounded-full border px-2.5 py-0.5 text-xs ${noteColor(colorIndex).pill}`}
+      className={`rounded-full border px-2.5 py-0.5 text-xs ${refColor(colorIndex).pill}`}
     >
       {note.title}
     </button>
