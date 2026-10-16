@@ -1,31 +1,50 @@
-// RefPill.tsx
-import { refColor } from "../lib/refColors";
-import type { NoteRef } from "../types";
+import { X } from "lucide-react";
 
 export type RefPillProps = {
-  note: NoteRef;
-  onOpen?: (note: NoteRef) => void;
-  onHover?: (noteId: number | null) => void;
-  colorIndex?: number;
+  label: string;
+  className?: string;
+  title?: string;
+  onClick?: () => void;
+  onHover?: (hovering: boolean) => void;
+  onDelete?: () => void;
 };
 
 export function RefPill({
-  note,
-  onOpen,
+  label,
+  className = "",
+  title,
+  onClick,
   onHover,
-  colorIndex = 0,
+  onDelete,
 }: RefPillProps) {
+  const labelPadding = `py-0.5 pl-2.5 ${onDelete ? "pr-1" : "pr-2.5"}`;
+
   return (
-    <button
-      type="button"
-      onClick={() => onOpen?.(note)}
-      onMouseEnter={() => onHover?.(note.noteId)}
-      onMouseLeave={() => onHover?.(null)}
-      onFocus={() => onHover?.(note.noteId)}
-      onBlur={() => onHover?.(null)}
-      className={`rounded-full border px-2.5 py-0.5 text-xs ${refColor(colorIndex).pill}`}
+    <span
+      title={title}
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
+      onFocus={() => onHover?.(true)}
+      onBlur={() => onHover?.(false)}
+      className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border text-xs ${className}`}
     >
-      {note.title}
-    </button>
+      {onClick ? (
+        <button type="button" onClick={onClick} className={labelPadding}>
+          {label}
+        </button>
+      ) : (
+        <span className={labelPadding}>{label}</span>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          aria-label={`Remove ${label}`}
+          onClick={onDelete}
+          className="rounded-full py-0.5 pl-0.5 pr-2 opacity-60 hover:opacity-100"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+    </span>
   );
 }

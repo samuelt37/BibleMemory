@@ -17,12 +17,11 @@ type Note struct {
 }
 
 type Chunk struct {
-	ID        int        `json:"id"`
-	NoteID    int        `json:"noteId"`
-	UserID    int        `json:"-"`
-	Content   string     `json:"content"`
-	Refs      []verseRef `json:"refs"`
-	Confirmed bool       `json:"confirmed"`
+	ID      int        `json:"id"`
+	NoteID  int        `json:"noteId"`
+	UserID  int        `json:"-"`
+	Content string     `json:"content"`
+	Refs    []verseRef `json:"refs"`
 }
 
 type NoteChunk = Chunk
@@ -42,7 +41,9 @@ type NoteFilter struct {
 
 type verseRef struct {
 	BookID     *int `json:"bookId"`
+	EndBookID  *int `json:"endBookId"`
 	Chapter    *int `json:"chapter"`
+	EndChapter *int `json:"endChapter"`
 	VerseStart *int `json:"verseStart"`
 	VerseEnd   *int `json:"verseEnd"`
 }
@@ -56,4 +57,15 @@ type chunkResult struct {
 	match     *chunkMatch
 	embedding []float32
 	err       error
+}
+
+type DeletedRef struct {
+	ChunkID int    `json:"chunkId"`
+	Source  string `json:"source"`
+	verseRef
+}
+
+type CreateChunkInput struct {
+	Content string     `json:"content"`
+	Refs    []verseRef `json:"refs"`
 }

@@ -7,7 +7,8 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import type { BookRange, ReviewResult } from "../types";
+import type { BookRange } from "@/features/scripture";
+import type { ReviewResult } from "../types";
 
 type ReviewSessionContextType = {
   ranges: BookRange[];

@@ -72,10 +72,12 @@ export function ReviewCard({
               {result.notes.map((n, i) => (
                 <RefPill
                   key={n.noteId}
-                  note={n}
-                  onOpen={(note) => onOpen?.(note, i)}
-                  onHover={setHoveredNoteId}
-                  colorIndex={i}
+                  label={n.title}
+                  className={refColor(i).pill}
+                  onClick={() => onOpen?.(n, i)}
+                  onHover={(hovering) =>
+                    setHoveredNoteId(hovering ? n.noteId : null)
+                  }
                 />
               ))}
               <button

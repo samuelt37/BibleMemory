@@ -10,7 +10,8 @@ import {
 } from "../api/useNotes";
 import { useAuth } from "@clerk/clerk-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useBooks } from "@/features/review/api/useBooks";
+import { useBooks } from "@/features/scripture";
+import { BookSelect } from "@/features/scripture/components/BookSelect";
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -142,18 +143,13 @@ export function NotesPage() {
             placeholder="Search notes…"
             className="rounded-md border px-3 py-1.5 text-sm"
           />
-          <select
-            value={book ?? ""}
-            onChange={(e) => setPassage(e.target.value, "")}
+          <BookSelect
+            books={books}
+            value={book ? Number(book) : null}
+            placeholder="All books"
+            onChange={(b) => setPassage(b ? String(b.id) : "", "")}
             className="rounded-md border bg-background px-2 py-1.5 text-sm"
-          >
-            <option value="">All books</option>
-            {books.map((b) => (
-              <option key={b.id} value={String(b.id)}>
-                {b.book}
-              </option>
-            ))}
-          </select>
+          />
           {book !== null && (
             <input
               type="number"

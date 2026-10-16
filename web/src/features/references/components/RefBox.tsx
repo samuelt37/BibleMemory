@@ -1,11 +1,16 @@
-import { useBooks } from "@/features/review";
+import { useBooks } from "@/features/scripture";
 import { useMemo } from "react";
 import { refKey, formatRef } from "../lib/ref";
 import type { Chunk, VerseRef } from "../types";
+import { RefPill } from "./RefPill";
 
-type Props = { chunks: Chunk[]; loading?: boolean };
+type Props = {
+  chunks: Chunk[];
+  loading?: boolean;
+  onDelete?: (ref: VerseRef) => void;
+};
 
-export function RefsBox({ chunks, loading }: Props) {
+export function RefsBox({ chunks, loading, onDelete }: Props) {
   const { data: books = [], isPending, isError } = useBooks();
 
   // look up by id, not array index, in case ids don't match positions
@@ -57,20 +62,23 @@ export function RefsBox({ chunks, loading }: Props) {
       ) : (
         <div className="flex flex-wrap gap-2">
           {refs.map((r) => (
-            <span
+            <RefPill
               key={refKey(r)}
+              label={formatRef(
+                r,
+                bookNames.get(r.bookId) ?? `Book ${r.bookId}`,
+              )}
+              title={
+                r.source === "user" ? "Added by you" : "Detected automatically"
+              }
               className={
-                "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium " +
+                "font-medium " +
                 (r.source === "user"
                   ? "bg-primary/10 border-primary/30 text-primary"
                   : "bg-muted text-foreground")
               }
-              title={
-                r.source === "user" ? "Added by you" : "Detected automatically"
-              }
-            >
-              {formatRef(r, bookNames.get(r.bookId) ?? `Book ${r.bookId}`)}
-            </span>
+              onDelete={onDelete ? () => onDelete(r) : undefined}
+            />
           ))}
         </div>
       )}

@@ -1,17 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { ReviewCard } from "../components/ReviewCard";
-import { RangeCard } from "../components/RangeCard";
-import { useBooks } from "../api/useBooks";
+import { RangeCard, useBooks, type BookRange, type ScriptureRangeDTO, type BookInfo, bookRangeToDTO } from "@/features/scripture";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/constants/config";
 import type {
-  BookRange,
-  ScriptureRangeDTO,
-  BookInfo,
   ReviewUnit,
   ReviewResult,
 } from "../types";
-import { bookRangeToDTO } from "../types";
 import { useReviewSession } from "../context/ReviewSessionContext";
 import { useSaveSession, useSessionHistory } from "../api/useSessions";
 import { SignedOut, SignInButton, useUser, useAuth } from "@clerk/clerk-react";

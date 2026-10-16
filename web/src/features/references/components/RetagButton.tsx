@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { useAuth } from "@clerk/clerk-react";
-import { API_URL } from "@/constants/config";
+import { rereferenceNote } from "../api";
 
 type Props = {
   noteId: number;
@@ -18,12 +18,7 @@ export function RetagButton({ noteId, onDone }: Props) {
     setRetagging(true);
     setError(null);
     try {
-      const token = await getToken();
-      const res = await fetch(`${API_URL}/notes/${noteId}/rereference`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(await res.text());
+      await rereferenceNote(noteId, await getToken());
       await onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Retag failed");

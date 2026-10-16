@@ -29,6 +29,8 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Delete("/notes/{id}", h.Delete)
 	r.Get("/notes/{id}", h.Get)
 	r.Post("/notes/{id}/rereference", h.ReRefNotes)
+	r.Post("/notes/{id}/chunks", h.CreateChunk)
+	r.Delete("/notes/{id}/refs", h.DeleteRef)
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
@@ -261,4 +263,79 @@ func (h *Handler) ReRefNotes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) CreateChunk(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	noteID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	var in CreateChunkInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil ||
+		strings.TrimSpace(in.Content) == "" || len(in.Refs) == 0 {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	for _, ref := range in.Refs {
+		if ref.BookID == nil {
+			http.Error(w, "invalid ref", http.StatusBadRequest)
+			return
+		}
+	}
+
+	chunk, err := h.service.CreateChunk(r.Context(), userID, noteID, in)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			http.Error(w, "note not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to create chunk", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(chunk)
+}
+
+func (h *Handler) DeleteRef(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	noteID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	var ref verseRef
+	if err := json.NewDecoder(r.Body).Decode(&ref); err != nil || ref.BookID == nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	deleted, err := h.service.DeleteReference(r.Context(), userID, noteID, ref)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			http.Error(w, "note not found", http.StatusNotFound)
+			return
+		}
+		log.Printf("delete ref note=%d: %v", noteID, err)
+		http.Error(w, "failed to delete reference", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"deleted": deleted})
 }

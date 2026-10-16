@@ -24,14 +24,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  useReviewSession,
   useBooks,
+  dtoToBookRange,
+  type BookInfo,
+} from "@/features/scripture";
+import {
+  useReviewSession,
   useDeleteSession,
   useSessionBookmarks,
   useSessionHistory,
-  type BookRange,
-  type ScriptureRangeDTO,
-  type BookInfo,
   type ReviewSession,
 } from "@/features/review";
 
@@ -150,29 +151,9 @@ export function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  function dtoToBookRange(dto: ScriptureRangeDTO, id: number): BookRange {
-    const startBook = books.find((b) => b.id === dto.startBookId);
-    const endBook = books.find((b) => b.id === dto.endBookId);
-    return {
-      id,
-      start: {
-        book: startBook?.book ?? "",
-        bookId: dto.startBookId,
-        chapter: dto.startChapter,
-        verse: dto.startVerse,
-      },
-      end: {
-        book: endBook?.book ?? "",
-        bookId: dto.endBookId,
-        chapter: dto.endChapter,
-        verse: dto.endVerse,
-      },
-    };
-  }
-
   const handleSelect = (session: ReviewSession) => {
     const bookRanges = session.ranges.map((dto, i) =>
-      dtoToBookRange(dto, i + 1),
+      dtoToBookRange(dto, books, i + 1),
     );
     loadRanges(bookRanges);
     if (location.pathname !== "/") {

@@ -65,7 +65,7 @@ func (s *Service) CheckSummary(ctx context.Context, req Request, userID int) ([]
 				log.Printf("CheckSummary: error finding notes for user %d (books %d-%d): %v", userID, rng.Start.Book, endBook, err)
 			} else {
 				// Only perform vector similarity embedding if the user has more than 5 notes
-				if len(chunks) == 5 {
+				if len(chunks) > 5 {
 					if total, _ := s.chunkRepo.CountByBooks(userID, rng.Start.Book, endBook); total > 5 {
 						emb, err := s.gemini.EmbedText(ctx, passages[i], 768)
 						if err == nil && emb != nil {
@@ -79,6 +79,7 @@ func (s *Service) CheckSummary(ctx context.Context, req Request, userID int) ([]
 					parts := make([]string, 0, len(chunks))
 					seen := make(map[int]bool)
 					for _, c := range chunks {
+						// log.Printf("  chunk=%d note=%d: %.40s", c.ChunkID, c.NoteID, c.Content)
 						parts = append(parts, fmt.Sprintf("[Note %d: %s]\n%s", c.NoteID, c.Title, c.Content))
 						if !seen[c.NoteID] {
 							seen[c.NoteID] = true
@@ -98,6 +99,7 @@ func (s *Service) CheckSummary(ctx context.Context, req Request, userID int) ([]
 		return nil, err
 	}
 	for i := range results {
+		log.Printf("range %d notesUsed: %+v", i, results[i].NotesUsed)
 		if i < len(noteRefs) {
 			uses := make(map[int]NoteUse, len(results[i].NotesUsed))
 			for _, u := range results[i].NotesUsed {
@@ -151,6 +153,7 @@ func (s *Service) gradeAllWithAI(
 		},
 	}
 	rawText, err := s.gemini.GenerateContent(ctx, body)
+	log.Printf("grader raw: %s", rawText)
 	if err != nil {
 		return nil, err
 	}

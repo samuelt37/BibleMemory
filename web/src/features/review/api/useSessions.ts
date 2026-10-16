@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@clerk/clerk-react";
 import { API_URL } from "@/constants/config";
-import type { ScriptureRangeDTO, ReviewSession } from "../types";
+import type { ScriptureRangeDTO } from "@/features/scripture";
+import type { ReviewSession } from "../types";
 
 export function useSessionHistory() {
   const { getToken, isSignedIn } = useAuth();

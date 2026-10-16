@@ -363,3 +363,37 @@ func isRateLimited(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "RESOURCE_EXHAUSTED") || strings.Contains(msg, "429")
 }
+
+func (s *Service) CreateChunk(ctx context.Context, userID, noteID int, in CreateChunkInput) (*Chunk, error) {
+	note, err := s.repo.GetByID(userID, noteID)
+	if err != nil {
+		return nil, err
+	}
+	if note == nil {
+		return nil, ErrNotFound
+	}
+
+	embedding, err := s.gemini.EmbedText(ctx, in.Content, 768)
+	if err != nil {
+		return nil, err
+	}
+
+	chunkID, err := s.chunkRepo.CreateWithRefs(ctx, userID, noteID, in.Content, embedding, in.Refs)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Chunk{ID: chunkID, Content: in.Content, Refs: in.Refs}, nil
+}
+
+func (s *Service) DeleteReference(ctx context.Context, userID, noteID int, ref verseRef) ([]DeletedRef, error) {
+	note, err := s.repo.GetByID(userID, noteID)
+	if err != nil {
+		return nil, err
+	}
+	if note == nil {
+		return nil, ErrNotFound
+	}
+
+	return s.chunkRepo.DeleteRefs(ctx, userID, noteID, ref)
+}

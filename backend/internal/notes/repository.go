@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 
@@ -182,7 +183,7 @@ func (r *ChunkRepository) Create(userID, noteID int, content string, embedding [
 
 func (r *ChunkRepository) ListByNote(noteID int) ([]Chunk, error) {
 	rows, err := r.db.Query(
-		`SELECT c.id, c.note_id, c.content, c.confirmed,
+		`SELECT c.id, c.note_id, c.content,
 		        COALESCE(
 		          json_agg(json_build_object(
 		            'id', cr.id, 'bookId', cr.book_id, 'chapter', cr.chapter,
@@ -207,7 +208,7 @@ func (r *ChunkRepository) ListByNote(noteID int) ([]Chunk, error) {
 	for rows.Next() {
 		var c Chunk
 		var raw []byte
-		if err := rows.Scan(&c.ID, &c.NoteID, &c.Content, &c.Confirmed, &raw); err != nil {
+		if err := rows.Scan(&c.ID, &c.NoteID, &c.Content, &raw); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(raw, &c.Refs); err != nil {
@@ -345,4 +346,70 @@ func (r *ChunkRepository) ReplaceRefs(userID, noteID, chunkID int, refs []verseR
 		}
 	}
 	return tx.Commit()
+}
+
+func (r *ChunkRepository) CreateWithRefs(ctx context.Context, userID, noteID int, content string, embedding []float32, refs []verseRef) (int, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	var chunkID int
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO note_chunks (note_id, user_id, content, embedding)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id`,
+		noteID, userID, content, pgvector.NewVector(embedding)).Scan(&chunkID)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, ref := range refs {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO chunk_refs (user_id, note_id, chunk_id, book_id, chapter, verse_start,
+									end_book_id, end_chapter, verse_end, source)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'user')
+			ON CONFLICT DO NOTHING`,
+			userID, noteID, chunkID, ref.BookID, ref.Chapter, ref.VerseStart,
+			ref.EndBookID, ref.EndChapter, ref.VerseEnd)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	return chunkID, tx.Commit()
+}
+
+func (r *ChunkRepository) DeleteRefs(ctx context.Context, userID, noteID int, ref verseRef) ([]DeletedRef, error) {
+	rows, err := r.db.QueryContext(ctx, `
+	DELETE FROM chunk_refs
+	WHERE user_id = $1
+	  AND note_id = $2
+	  AND book_id = $3
+	  AND chapter      IS NOT DISTINCT FROM $4::int
+	  AND verse_start  IS NOT DISTINCT FROM $5::int
+	  AND end_book_id  IS NOT DISTINCT FROM $6::int
+	  AND end_chapter  IS NOT DISTINCT FROM $7::int
+	  AND verse_end    IS NOT DISTINCT FROM $8::int
+	RETURNING chunk_id, source, book_id, chapter, verse_start, end_book_id, end_chapter, verse_end`,
+		userID, noteID, ref.BookID, ref.Chapter, ref.VerseStart,
+		ref.EndBookID, ref.EndChapter, ref.VerseEnd)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	deleted := []DeletedRef{}
+	for rows.Next() {
+		var d DeletedRef
+		if err := rows.Scan(
+			&d.ChunkID, &d.Source, &d.BookID, &d.Chapter, &d.VerseStart,
+			&d.EndBookID, &d.EndChapter, &d.VerseEnd,
+		); err != nil {
+			return nil, err
+		}
+		deleted = append(deleted, d)
+	}
+	return deleted, rows.Err()
 }
