@@ -350,7 +350,6 @@ func (h *Handler) CountsByBook(w http.ResponseWriter, r *http.Request) {
 
 	counts, err := h.service.NoteCountsByBook(r.Context(), userID)
 	if err != nil {
-		log.Printf("note counts by book", "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
