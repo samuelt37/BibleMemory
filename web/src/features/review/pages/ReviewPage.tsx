@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { ReviewCard } from "../components/ReviewCard";
-import { RangeCard, useBooks, type BookRange, type ScriptureRangeDTO, type BookInfo, bookRangeToDTO } from "@/features/scripture";
+import {
+  RangeCard,
+  useBooks,
+  type BookRange,
+  type ScriptureRangeDTO,
+  type BookInfo,
+  bookRangeToDTO,
+  BookSelect,
+} from "@/features/scripture";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/constants/config";
-import type {
-  ReviewUnit,
-  ReviewResult,
-} from "../types";
+import type { ReviewUnit, ReviewResult } from "../types";
 import { useReviewSession } from "../context/ReviewSessionContext";
 import { useSaveSession, useSessionHistory } from "../api/useSessions";
 import { SignedOut, SignInButton, useUser, useAuth } from "@clerk/clerk-react";
@@ -16,6 +21,8 @@ import { NoteView } from "@/features/notes/components/NoteView";
 import { useNavigate } from "react-router-dom";
 import { refColor } from "@/features/references/lib/refColors";
 import type { NoteRef } from "@/features/references/types";
+import { useQuery } from "@tanstack/react-query";
+import { fetchNoteCountsByBook } from "@/features/notes/api/api";
 
 function buildReviewUnits(ranges: BookRange[]): ReviewUnit[] {
   const units: ReviewUnit[] = [];
@@ -149,6 +156,11 @@ export function ReviewPage() {
     ]);
   };
 
+  const { data: noteCounts } = useQuery({
+    queryKey: ["note-counts-by-book"],
+    queryFn: async () => fetchNoteCountsByBook(await getToken()),
+  });
+
   async function handleCheckAll() {
     if (reviewUnits.length === 0) return;
 
@@ -252,25 +264,16 @@ export function ReviewPage() {
               Failed to load books
             </div>
           ) : (
-            <select
-              value=""
-              onChange={(e) => {
-                const selected = books.find(
-                  (b) => b.id === Number(e.target.value),
-                );
-                if (selected) addRange(selected);
+            <BookSelect
+              books={books}
+              value={null}
+              placeholder="+ Add"
+              onChange={(b) => {
+                if (b) addRange(b);
               }}
+              noteCounts={noteCounts}
               className="appearance-none h-10 rounded-lg border border-border px-4 text-sm text-muted-foreground bg-transparent focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
-            >
-              <option value="" disabled>
-                + Add
-              </option>
-              {books.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.book}
-                </option>
-              ))}
-            </select>
+            />
           )}
         </div>
 

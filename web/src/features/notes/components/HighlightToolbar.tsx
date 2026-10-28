@@ -6,9 +6,9 @@ import {
   type BookRange,
   type ScripturePosition,
   type BookInfo,
+  ScripturePositionPicker,
+  comparePositions,
 } from "@/features/scripture";
-import { ScripturePositionPicker } from "@/features/scripture/components/ScripturePositionPicker";
-import { comparePositions } from "@/features/scripture/lib/positions";
 
 export const HIGHLIGHT_COLORS = [
   { name: "yellow", class: "bg-yellow-300" },

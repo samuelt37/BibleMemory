@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 
 	"github.com/lib/pq"
 	"github.com/pgvector/pgvector-go"
@@ -186,7 +187,8 @@ func (r *ChunkRepository) ListByNote(noteID int) ([]Chunk, error) {
 		`SELECT c.id, c.note_id, c.content,
 		        COALESCE(
 		          json_agg(json_build_object(
-		            'id', cr.id, 'bookId', cr.book_id, 'chapter', cr.chapter,
+		            'id', cr.id, 'bookId', cr.book_id, 'endBookId', cr.end_book_id,
+		            'chapter', cr.chapter, 'endChapter', cr.end_chapter,
 		            'verseStart', cr.verse_start, 'verseEnd', cr.verse_end,
 		            'source', cr.source
 		          ) ORDER BY cr.id) FILTER (WHERE cr.id IS NOT NULL),
@@ -357,8 +359,8 @@ func (r *ChunkRepository) CreateWithRefs(ctx context.Context, userID, noteID int
 
 	var chunkID int
 	err = tx.QueryRowContext(ctx, `
-		INSERT INTO note_chunks (note_id, user_id, content, embedding)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO note_chunks (note_id, user_id, content, embedding, source)
+		VALUES ($1, $2, $3, $4, 'user')
 		RETURNING id`,
 		noteID, userID, content, pgvector.NewVector(embedding)).Scan(&chunkID)
 	if err != nil {
@@ -403,13 +405,40 @@ func (r *ChunkRepository) DeleteRefs(ctx context.Context, userID, noteID int, re
 	deleted := []DeletedRef{}
 	for rows.Next() {
 		var d DeletedRef
+		var source string
 		if err := rows.Scan(
-			&d.ChunkID, &d.Source, &d.BookID, &d.Chapter, &d.VerseStart,
+			&d.ChunkID, &source, &d.BookID, &d.Chapter, &d.VerseStart,
 			&d.EndBookID, &d.EndChapter, &d.VerseEnd,
 		); err != nil {
 			return nil, err
 		}
+		d.Source = &source
 		deleted = append(deleted, d)
 	}
 	return deleted, rows.Err()
+}
+
+func (r *ChunkRepository) CountByBook(ctx context.Context, userID int) ([]BookNoteCount, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT b AS book_id, COUNT(DISTINCT cr.note_id)
+		FROM chunk_refs cr
+		CROSS JOIN LATERAL generate_series(
+			cr.book_id, COALESCE(cr.end_book_id, cr.book_id)
+		) AS b
+		WHERE cr.user_id = $1
+		GROUP BY b`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("count notes by book: %w", err)
+	}
+	defer rows.Close()
+
+	var out []BookNoteCount
+	for rows.Next() {
+		var c BookNoteCount
+		if err := rows.Scan(&c.BookID, &c.Count); err != nil {
+			return nil, fmt.Errorf("scan note count: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }

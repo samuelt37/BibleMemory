@@ -7,6 +7,7 @@ type Props = {
   onChange: (book: BookInfo | null) => void;
   placeholder?: string; // when set, adds an empty option that returns null
   className?: string;
+  noteCounts?: Record<number, number>; // bookId -> number of notes
 };
 
 export function BookSelect({
@@ -15,6 +16,7 @@ export function BookSelect({
   onChange,
   placeholder,
   className,
+  noteCounts,
 }: Props) {
   return (
     <select
@@ -28,11 +30,14 @@ export function BookSelect({
       className={className ?? "rounded-md border bg-background p-1 text-sm"}
     >
       {placeholder !== undefined && <option value="">{placeholder}</option>}
-      {books.map((b) => (
-        <option key={b.id} value={b.id}>
-          {b.book}
-        </option>
-      ))}
+      {books.map((b) => {
+        const count = noteCounts?.[b.id];
+        return (
+          <option key={b.id} value={b.id}>
+            {count !== undefined ? `${b.book} (${count})` : b.book}
+          </option>
+        );
+      })}
     </select>
   );
 }

@@ -10,8 +10,9 @@ import {
 } from "../api/useNotes";
 import { useAuth } from "@clerk/clerk-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useBooks } from "@/features/scripture";
-import { BookSelect } from "@/features/scripture/components/BookSelect";
+import { useBooks, BookSelect } from "@/features/scripture";
+import { useQuery } from "@tanstack/react-query";
+import { fetchNoteCountsByBook } from "../api/api";
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -53,6 +54,11 @@ export function NotesPage() {
   const [pasteTitle, setPasteTitle] = useState("");
   const [pasteText, setPasteText] = useState("");
   const [searchText, setSearchText] = useState(q);
+
+  const { data: noteCounts } = useQuery({
+    queryKey: ["note-counts-by-book"],
+    queryFn: async () => fetchNoteCountsByBook(await getToken()),
+  });
 
   // write the search text to the URL after a short pause
   useEffect(() => {
@@ -148,6 +154,7 @@ export function NotesPage() {
             value={book ? Number(book) : null}
             placeholder="All books"
             onChange={(b) => setPassage(b ? String(b.id) : "", "")}
+            noteCounts={noteCounts}
             className="rounded-md border bg-background px-2 py-1.5 text-sm"
           />
           {book !== null && (

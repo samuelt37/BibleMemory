@@ -37,3 +37,11 @@ export async function deleteRef(
   if (!res.ok) throw new Error("failed to delete reference");
   return (await res.json()).deleted;
 }
+
+export async function fetchNoteCountsByBook(
+  token: string | null,
+): Promise<Record<number, number>> {
+  const res = await apiFetch("/notes/counts-by-book", token);
+  if (!res.ok) throw new Error("failed to load note counts");
+  return res.json();
+}

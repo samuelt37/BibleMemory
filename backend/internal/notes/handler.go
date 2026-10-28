@@ -31,6 +31,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/notes/{id}/rereference", h.ReRefNotes)
 	r.Post("/notes/{id}/chunks", h.CreateChunk)
 	r.Delete("/notes/{id}/refs", h.DeleteRef)
+	r.Get("/notes/counts-by-book", h.CountsByBook)
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
@@ -338,4 +339,22 @@ func (h *Handler) DeleteRef(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"deleted": deleted})
+}
+
+func (h *Handler) CountsByBook(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	counts, err := h.service.NoteCountsByBook(r.Context(), userID)
+	if err != nil {
+		log.Printf("note counts by book", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(counts) // {"1": 4, "43": 12}
 }

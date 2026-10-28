@@ -40,12 +40,14 @@ type NoteFilter struct {
 }
 
 type verseRef struct {
-	BookID     *int `json:"bookId"`
-	EndBookID  *int `json:"endBookId"`
-	Chapter    *int `json:"chapter"`
-	EndChapter *int `json:"endChapter"`
-	VerseStart *int `json:"verseStart"`
-	VerseEnd   *int `json:"verseEnd"`
+	ID         *int    `json:"id,omitempty"`
+	BookID     *int    `json:"bookId"`
+	EndBookID  *int    `json:"endBookId,omitempty"`
+	Chapter    *int    `json:"chapter,omitempty"`
+	EndChapter *int    `json:"endChapter,omitempty"`
+	VerseStart *int    `json:"verseStart,omitempty"`
+	VerseEnd   *int    `json:"verseEnd,omitempty"`
+	Source     *string `json:"source,omitempty"`
 }
 
 type chunkMatch struct {
@@ -60,12 +62,16 @@ type chunkResult struct {
 }
 
 type DeletedRef struct {
-	ChunkID int    `json:"chunkId"`
-	Source  string `json:"source"`
+	ChunkID int `json:"chunkId"`
 	verseRef
 }
 
 type CreateChunkInput struct {
 	Content string     `json:"content"`
 	Refs    []verseRef `json:"refs"`
+}
+
+type BookNoteCount struct {
+	BookID int
+	Count  int
 }

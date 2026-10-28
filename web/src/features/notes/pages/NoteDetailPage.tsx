@@ -110,7 +110,6 @@ export function NoteDetailPage() {
     const noteId = Number(id);
     if (!id || Number.isNaN(noteId)) return;
 
-    if (!noteId) return;
     try {
       const token = await getToken();
       await deleteRef(noteId, ref, token);

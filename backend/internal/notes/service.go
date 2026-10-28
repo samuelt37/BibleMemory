@@ -397,3 +397,15 @@ func (s *Service) DeleteReference(ctx context.Context, userID, noteID int, ref v
 
 	return s.chunkRepo.DeleteRefs(ctx, userID, noteID, ref)
 }
+
+func (s *Service) NoteCountsByBook(ctx context.Context, userID int) (map[int]int, error) {
+	rows, err := s.chunkRepo.CountByBook(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[int]int, len(rows))
+	for _, r := range rows {
+		counts[r.BookID] = r.Count
+	}
+	return counts, nil
+}

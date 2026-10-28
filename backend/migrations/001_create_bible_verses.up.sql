@@ -23,9 +23,23 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS notes (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    source_type TEXT NOT NULL DEFAULT 'file',
+    r2_key TEXT,
+    mime_type TEXT,
+    file_size BIGINT,
+    raw_text TEXT,
+    status TEXT NOT NULL DEFAULT 'processing',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 CREATE EXTENSION IF NOT EXISTS vector;
 
-CREATE TABLE note_chunks (
+CREATE TABLE IF NOT EXISTS note_chunks (
   id SERIAL PRIMARY KEY,
   note_id INT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
   user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
