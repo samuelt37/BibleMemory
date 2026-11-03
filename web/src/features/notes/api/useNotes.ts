@@ -48,7 +48,7 @@ export function useUploadNote() {
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-      if (!res.ok) throw new Error("Upload failed");
+      if (!res.ok) throw new Error((await res.text()) || "Upload failed");
       return res.json() as Promise<Note>;
     },
     onSuccess: () => {

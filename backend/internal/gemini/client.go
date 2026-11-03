@@ -18,9 +18,7 @@ type Client struct {
 
 func NewClient() *Client {
 	return &Client{
-		httpClient: &http.Client{
-			Timeout: 45 * time.Second, // Safe timeout for large PDFs and LLM responses
-		},
+		httpClient: &http.Client{}, // deadlines now come from each call's context
 	}
 }
 
@@ -54,7 +52,18 @@ func (c *Client) modelsToTry() []string {
 }
 
 // GenerateContent sends a payload to Gemini with fallback models and retry handling.
-func (c *Client) GenerateContent(ctx context.Context, body any) (string, error) {
+func (c *Client) GenerateContent(ctx context.Context, body map[string]any) (string, error) {
+	return c.generateContent(ctx, body, 45*time.Second)
+}
+
+// for video transcription
+func (c *Client) GenerateContentLong(ctx context.Context, body map[string]any) (string, error) {
+	return c.generateContent(ctx, body, 15*time.Minute)
+}
+
+func (c *Client) generateContent(ctx context.Context, body map[string]any, timeout time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	apiKey, err := c.getAPIKey()
 	if err != nil {
 		return "", err

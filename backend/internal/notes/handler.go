@@ -3,6 +3,7 @@ package notes
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -34,6 +35,25 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/notes/counts-by-book", h.CountsByBook)
 }
 
+const (
+	maxDocBytes   = 20 << 20  // images, PDFs, text
+	maxVideoBytes = 300 << 20 // videos
+)
+
+var allowedTypes = map[string]bool{
+	"application/pdf": true,
+	"text/plain":      true, // also what Go sniffs .md and .csv as
+	"image/jpeg":      true,
+	"image/png":       true,
+	"image/webp":      true,
+	"image/heic":      true,
+	"image/heif":      true,
+}
+
+func isAllowedType(mimeType string) bool {
+	return strings.HasPrefix(mimeType, "video/") || allowedTypes[mimeType]
+}
+
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	userID, ok := auth.UserIDFromContext(r.Context())
 	if !ok {
@@ -41,8 +61,17 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(20 << 20); err != nil {
-		http.Error(w, "file too large", http.StatusBadRequest)
+	// Hard cap on the whole request body (video limit + a little overhead)
+	r.Body = http.MaxBytesReader(w, r.Body, maxVideoBytes+(1<<20))
+
+	// 32MB stays in memory; anything bigger spills to temp files on disk
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
+		} else {
+			http.Error(w, "invalid upload", http.StatusBadRequest)
+		}
 		return
 	}
 
@@ -53,8 +82,36 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	note, err := h.service.UploadNote(r.Context(), userID, file, header)
+	// Sniff the real type from the first bytes instead of trusting the client
+	buf := make([]byte, 512)
+	n, _ := file.Read(buf)
+	mimeType, _, _ := strings.Cut(http.DetectContentType(buf[:n]), ";") // drops "; charset=..."
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		http.Error(w, "upload failed", http.StatusInternalServerError)
+		return
+	}
+
+	// The sniffer misses some formats (HEIC, .mov), so fall back to the client's header
+	if mimeType == "application/octet-stream" {
+		ct, _, _ := strings.Cut(header.Header.Get("Content-Type"), ";")
+		if strings.HasPrefix(ct, "video/") || strings.HasPrefix(ct, "image/") {
+			mimeType = ct
+		}
+	}
+
+	isVideo := strings.HasPrefix(mimeType, "video/")
+	if !isAllowedType(mimeType) {
+		http.Error(w, "unsupported file type", http.StatusUnsupportedMediaType)
+		return
+	}
+	if !isVideo && header.Size > maxDocBytes {
+		http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	note, err := h.service.UploadNote(r.Context(), userID, file, header, mimeType)
 	if err != nil {
+		log.Println("Upload: UploadNote failed:", err)
 		http.Error(w, "upload failed", http.StatusInternalServerError)
 		return
 	}

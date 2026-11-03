@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"mime/multipart"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -69,16 +70,21 @@ func (s *Service) buildBookList() (string, error) {
 	return s.bookListCache, nil
 }
 
-func (s *Service) UploadNote(ctx context.Context, userID int, file multipart.File, header *multipart.FileHeader) (*Note, error) {
-	fileBytes, err := io.ReadAll(file)
-	if err != nil {
-		return nil, err
+func (s *Service) UploadNote(ctx context.Context, userID int, file multipart.File, header *multipart.FileHeader, mimeType string) (*Note, error) {
+	key := fmt.Sprintf("users/%d/%s-%s", userID, uuid.NewString(), path.Base(header.Filename))
+	isVideo := strings.HasPrefix(mimeType, "video/")
+
+	var fileBytes []byte
+	var body io.Reader = file
+	if !isVideo {
+		b, err := io.ReadAll(file)
+		if err != nil {
+			return nil, err
+		}
+		fileBytes, body = b, bytes.NewReader(b)
 	}
 
-	key := fmt.Sprintf("users/%d/%s-%s", userID, uuid.NewString(), header.Filename)
-	mimeType := header.Header.Get("Content-Type")
-
-	if err := s.r2.Upload(ctx, key, bytes.NewReader(fileBytes), mimeType); err != nil {
+	if err := s.r2.Upload(ctx, key, body, mimeType); err != nil {
 		return nil, err
 	}
 
@@ -87,9 +93,56 @@ func (s *Service) UploadNote(ctx context.Context, userID int, file multipart.Fil
 		return nil, err
 	}
 
-	go s.extractAndProcess(context.Background(), userID, note.ID, fileBytes, mimeType)
-
+	if isVideo {
+		go s.processVideo(userID, note.ID, key, header.Size, mimeType)
+	} else {
+		go s.extractAndProcess(context.Background(), userID, note.ID, fileBytes, mimeType)
+	}
 	return note, nil
+}
+
+func (s *Service) processVideo(userID, noteID int, key string, size int64, mimeType string) {
+	log.Println("processVideo: starting for note", noteID, "size:", size, "bytes")
+
+	extractCtx, cancelExtract := context.WithTimeout(context.Background(), 20*time.Minute)
+	defer cancelExtract()
+
+	obj, err := s.r2.Download(extractCtx, key)
+	if err != nil {
+		log.Println("processVideo: r2 download failed for note", noteID, ":", err)
+		s.repo.UpdateStatus(noteID, "failed")
+		return
+	}
+	defer obj.Close()
+
+	f, err := s.gemini.UploadFile(extractCtx, obj, size, mimeType, key)
+	if err != nil {
+		log.Println("processVideo: gemini upload failed for note", noteID, ":", err)
+		s.repo.UpdateStatus(noteID, "failed")
+		return
+	}
+	defer s.gemini.DeleteFile(context.Background(), f.Name)
+
+	text, err := extractTextFromVideo(extractCtx, s.gemini, f)
+	if err != nil {
+		log.Println("processVideo: extraction failed for note", noteID, ":", err)
+		s.repo.UpdateStatus(noteID, "failed")
+		return
+	}
+
+	if err := s.repo.UpdateRawText(noteID, text); err != nil {
+		log.Println("processVideo: failed to save extracted text for note", noteID, ":", err)
+		s.repo.UpdateStatus(noteID, "failed")
+		return
+	}
+
+	// Fresh budget for chunk -> tag -> embed, so a slow upload can't starve it
+	processCtx, cancelProcess := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancelProcess()
+
+	if err := s.ProcessNote(processCtx, userID, noteID); err != nil {
+		log.Println("processVideo: ProcessNote failed for note", noteID, ":", err)
+	}
 }
 
 func (s *Service) extractAndProcess(ctx context.Context, userID, noteID int, fileBytes []byte, mimeType string) {

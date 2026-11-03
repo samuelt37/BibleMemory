@@ -68,3 +68,14 @@ func (r *R2Client) PresignedGetURL(ctx context.Context, key string, expires time
 	}
 	return req.URL, nil
 }
+
+func (r *R2Client) Download(ctx context.Context, key string) (io.ReadCloser, error) {
+	out, err := r.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(r.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out.Body, nil
+}

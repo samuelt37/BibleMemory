@@ -10,6 +10,10 @@ import (
 	"github.com/samuelt37/BibleMemory/internal/gemini"
 )
 
+const transcribePrompt = `Transcribe all text in this file exactly as written, including handwriting.
+Preserve line breaks and paragraph order. Mark unreadable words as [illegible].
+Return ONLY the transcribed text, with no commentary.`
+
 func extractTextFromFile(ctx context.Context, client *gemini.Client, fileBytes []byte, mimeType string) (string, error) {
 	encoded := base64.StdEncoding.EncodeToString(fileBytes)
 
@@ -17,7 +21,7 @@ func extractTextFromFile(ctx context.Context, client *gemini.Client, fileBytes [
 		"contents": []map[string]any{
 			{
 				"parts": []map[string]any{
-					{"text": "Extract all readable text from this document. Return ONLY the raw extracted text, with no commentary, headers, or formatting notes."},
+					{"text": transcribePrompt},
 					{
 						"inline_data": map[string]string{
 							"mime_type": mimeType,
@@ -30,6 +34,23 @@ func extractTextFromFile(ctx context.Context, client *gemini.Client, fileBytes [
 	}
 
 	return client.GenerateContent(ctx, body)
+}
+
+func extractTextFromVideo(ctx context.Context, client *gemini.Client, f *gemini.File) (string, error) {
+	body := map[string]any{
+		"contents": []map[string]any{
+			{
+				"parts": []map[string]any{
+					{"file_data": map[string]string{
+						"mime_type": f.MimeType,
+						"file_uri":  f.URI,
+					}},
+					{"text": "Transcribe all spoken content in this video as plain text. Include relevant on-screen text. Return ONLY the transcript, with no commentary, timestamps, or headers."},
+				},
+			},
+		},
+	}
+	return client.GenerateContentLong(ctx, body)
 }
 
 func chunkText(text string, targetWords int) []string {

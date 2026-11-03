@@ -135,7 +135,7 @@ export function NotesPage() {
             ref={fileInputRef}
             type="file"
             multiple
-            accept=".pdf,.doc,.docx,image/*"
+            accept="image/*,application/pdf,text/plain,video/*"
             className="hidden"
             onChange={handleFileSelect}
           />
