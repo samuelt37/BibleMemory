@@ -128,3 +128,10 @@
     @apply font-sans;
     }
 }
+
+::highlight(ref-hover) {
+  background-color: rgb(253 224 71 / 0.5);
+}
+.dark ::highlight(ref-hover) {
+  background-color: rgb(234 179 8 / 0.3);
+}

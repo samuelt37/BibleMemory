@@ -168,11 +168,18 @@ func (r *ChunkRepository) Create(userID, noteID int, content string, embedding [
 		if ref.BookID == nil {
 			continue
 		}
+
+		var quotesArg any // nil stores NULL
+		if len(ref.Quotes) > 0 {
+			b, _ := json.Marshal(ref.Quotes)
+			quotesArg = string(b)
+		}
+
 		_, err = tx.Exec(
-			`INSERT INTO chunk_refs (user_id, note_id, chunk_id, book_id, chapter, verse_start, verse_end)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`INSERT INTO chunk_refs (user_id, note_id, chunk_id, book_id, chapter, verse_start, verse_end, quotes)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
 			 ON CONFLICT DO NOTHING`,
-			userID, noteID, chunkID, *ref.BookID, ref.Chapter, ref.VerseStart, ref.VerseEnd,
+			userID, noteID, chunkID, *ref.BookID, ref.Chapter, ref.VerseStart, ref.VerseEnd, quotesArg,
 		)
 		if err != nil {
 			return err
@@ -190,7 +197,7 @@ func (r *ChunkRepository) ListByNote(noteID int) ([]Chunk, error) {
 		            'id', cr.id, 'bookId', cr.book_id, 'endBookId', cr.end_book_id,
 		            'chapter', cr.chapter, 'endChapter', cr.end_chapter,
 		            'verseStart', cr.verse_start, 'verseEnd', cr.verse_end,
-		            'source', cr.source
+		            'source', cr.source, 'quotes', cr.quotes
 		          ) ORDER BY cr.id) FILTER (WHERE cr.id IS NOT NULL),
 		          '[]'
 		        )
@@ -338,11 +345,18 @@ func (r *ChunkRepository) ReplaceRefs(userID, noteID, chunkID int, refs []verseR
 		if ref.BookID == nil {
 			continue
 		}
+
+		var quotesArg any // nil stores NULL
+		if len(ref.Quotes) > 0 {
+			b, _ := json.Marshal(ref.Quotes)
+			quotesArg = string(b)
+		}
+
 		if _, err = tx.Exec(
-			`INSERT INTO chunk_refs (user_id, note_id, chunk_id, book_id, chapter, verse_start, verse_end)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`INSERT INTO chunk_refs (user_id, note_id, chunk_id, book_id, chapter, verse_start, verse_end, quotes)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
 			 ON CONFLICT DO NOTHING`,
-			userID, noteID, chunkID, *ref.BookID, ref.Chapter, ref.VerseStart, ref.VerseEnd,
+			userID, noteID, chunkID, *ref.BookID, ref.Chapter, ref.VerseStart, ref.VerseEnd, quotesArg,
 		); err != nil {
 			return err
 		}

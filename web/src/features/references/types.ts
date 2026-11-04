@@ -15,7 +15,8 @@ export interface VerseRef {
   endChapter?: number | null;
   verseEnd?: number | null;
   source?: string;
+  quotes?: string[];
 }
 
-export type Chunk = { id: number; refs: VerseRef[] };
+export type Chunk = { id: number; content: string; refs: VerseRef[] };
 export type DeletedRef = VerseRef & { chunkId: number };

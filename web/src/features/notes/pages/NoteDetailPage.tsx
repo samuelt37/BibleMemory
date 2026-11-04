@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { useAuth } from "@clerk/clerk-react";
@@ -20,6 +20,7 @@ import {
 import { useBooks } from "@/features/scripture/api/useBooks";
 import { createChunk, deleteRef } from "../api/api";
 import { refKey } from "@/features/references/lib/ref";
+import { useRangeHighlight, scrollToText } from "../hooks/useRangeHighlight";
 
 export function NoteDetailPage() {
   const { data: books = [] } = useBooks();
@@ -67,6 +68,56 @@ export function NoteDetailPage() {
 
   const cancelPending = useCallback(() => setPending(null), []);
 
+  const [hoveredRef, setHoveredRef] = useState<VerseRef | null>(null);
+  const [pinnedRef, setPinnedRef] = useState<VerseRef | null>(null);
+
+  const textsFor = useCallback(
+    (ref: VerseRef | null) => {
+      if (!ref) return [];
+
+      // whole-book pill: every chunk that has any ref in this book
+      if (ref.chapter == null) {
+        return chunks
+          .filter((c) => c.refs?.some((r) => r.bookId === ref.bookId))
+          .map((c) => c.content);
+      }
+
+      const key = refKey(ref);
+      return chunks.flatMap((c) => {
+        const match = c.refs?.find((r) => refKey(r) === key);
+        if (!match) return [];
+        return match.quotes?.length ? match.quotes : [c.content];
+      });
+    },
+    [chunks],
+  );
+
+  // hover previews on top of the pin; leaving a pill falls back to the pinned ref
+  const shownTexts = useMemo(
+    () => textsFor(hoveredRef ?? pinnedRef),
+    [textsFor, hoveredRef, pinnedRef],
+  );
+
+  useRangeHighlight(noteRef, shownTexts);
+
+  function handleSelectRef(ref: VerseRef) {
+    if (pinnedRef && refKey(pinnedRef) === refKey(ref)) {
+      setPinnedRef(null); // click again to unpin
+      return;
+    }
+    setPinnedRef(ref);
+    if (noteRef.current) scrollToText(noteRef.current, textsFor(ref));
+  }
+
+  // Escape unpins
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPinnedRef(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   function handlePick(color: HighlightColor) {
     if (!selection) return;
     setPending({ selection, color });
@@ -107,6 +158,8 @@ export function NoteDetailPage() {
   }
 
   async function handleDeleteRef(ref: VerseRef) {
+    setHoveredRef(null);
+    if (pinnedRef && refKey(pinnedRef) === refKey(ref)) setPinnedRef(null);
     const noteId = Number(id);
     if (!id || Number.isNaN(noteId)) return;
 
@@ -162,6 +215,9 @@ export function NoteDetailPage() {
               chunks={chunks}
               loading={chunksLoading}
               onDelete={handleDeleteRef}
+              onHoverRef={setHoveredRef}
+              onSelectRef={handleSelectRef}
+              pinnedKey={pinnedRef ? refKey(pinnedRef) : null}
             />
           </div>
         ) : (

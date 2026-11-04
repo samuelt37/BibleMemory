@@ -64,6 +64,7 @@ CREATE TABLE chunk_refs (
   verse_start INT,
   verse_end   INT,
   source      TEXT NOT NULL DEFAULT 'auto',  -- 'auto' (tagger) or 'user'
+  quotes      JSONB,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE NULLS NOT DISTINCT (chunk_id, book_id, chapter, verse_start, verse_end)
 );

@@ -8,9 +8,19 @@ type Props = {
   chunks: Chunk[];
   loading?: boolean;
   onDelete?: (ref: VerseRef) => void;
+  onHoverRef?: (ref: VerseRef | null) => void;
+  onSelectRef?: (ref: VerseRef) => void;
+  pinnedKey?: string | null;
 };
 
-export function RefsBox({ chunks, loading, onDelete }: Props) {
+export function RefsBox({
+  chunks,
+  loading,
+  onDelete,
+  onHoverRef,
+  onSelectRef,
+  pinnedKey,
+}: Props) {
   const { data: books = [], isPending, isError } = useBooks();
 
   // look up by id, not array index, in case ids don't match positions
@@ -74,12 +84,15 @@ export function RefsBox({ chunks, loading, onDelete }: Props) {
                     : "Detected automatically"
                 }
                 className={
-                  "font-medium " +
+                  "font-medium transition-colors " +
                   (r.source === "user"
                     ? "bg-primary/10 border-primary/30 text-primary"
-                    : "bg-muted text-foreground")
+                    : "bg-muted text-foreground") +
+                  (refKey(r) === pinnedKey ? " ring-2 ring-yellow-400" : "")
                 }
+                onClick={onSelectRef ? () => onSelectRef(r) : undefined}
                 onDelete={onDelete ? () => onDelete(r) : undefined}
+                onHover={(hovering) => onHoverRef?.(hovering ? r : null)}
               />
             ))}
           </div>

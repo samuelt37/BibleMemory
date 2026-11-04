@@ -40,14 +40,15 @@ type NoteFilter struct {
 }
 
 type verseRef struct {
-	ID         *int    `json:"id,omitempty"`
-	BookID     *int    `json:"bookId"`
-	EndBookID  *int    `json:"endBookId,omitempty"`
-	Chapter    *int    `json:"chapter,omitempty"`
-	EndChapter *int    `json:"endChapter,omitempty"`
-	VerseStart *int    `json:"verseStart,omitempty"`
-	VerseEnd   *int    `json:"verseEnd,omitempty"`
-	Source     *string `json:"source,omitempty"`
+	ID         *int     `json:"id,omitempty"`
+	BookID     *int     `json:"bookId"`
+	EndBookID  *int     `json:"endBookId,omitempty"`
+	Chapter    *int     `json:"chapter,omitempty"`
+	EndChapter *int     `json:"endChapter,omitempty"`
+	VerseStart *int     `json:"verseStart,omitempty"`
+	VerseEnd   *int     `json:"verseEnd,omitempty"`
+	Source     *string  `json:"source,omitempty"`
+	Quotes     []string `json:"quotes,omitempty"`
 }
 
 type chunkMatch struct {

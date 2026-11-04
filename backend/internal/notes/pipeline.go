@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/samuelt37/BibleMemory/internal/gemini"
@@ -108,14 +109,16 @@ func matchChunkToVerse(ctx context.Context, client *gemini.Client, chunk string,
 		%s
 
 		Respond ONLY with JSON in this shape:
-		{"refs": [{"bookId": <int>, "chapter": <int or null>, "verseStart": <int or null>, "verseEnd": <int or null>}]}
+		{"refs": [{"bookId": 19, "chapter": 110, "verseStart": 4, "verseEnd": 4, "quotes": ["Mentioned in Psalms 110:4 a priesthood according to his order."]}]}
 
 		Rules:
 		- One object per distinct passage, at most 5. Most chunks have one or two.
 		- Include passages the text names, and also passages it clearly alludes to even when not named (e.g. a note about Esau selling his birthright may also point to Hebrews 12:16-17).
 		- bookId is required. Use null for chapter/verseStart/verseEnd if the text only refers to a whole book or whole chapter.
 		- Only set verseStart/verseEnd when chapter is set. For a single verse, set both to the same number.
-		- If the text isn't clearly about a specific passage, return {"refs": []}.`,
+		- If the text isn't clearly about a specific passage, return {"refs": []}.
+		- quotes: if chapter AND verseStart are both set, quotes MUST contain at least one entry. Each entry is a span of the note text copied character for character (a complete clause or sentence of at least 5 words, never a bare name), and it must be the part of the note that points to this passage. Give one entry per distinct place the note discusses the passage, up to 5.
+		- If chapter or verseStart is null (the note only refers to a whole book or whole chapter), set quotes to [].`,
 		bookList, chunk,
 	)
 
@@ -136,7 +139,79 @@ func matchChunkToVerse(ctx context.Context, client *gemini.Client, chunk string,
 	if err := json.Unmarshal([]byte(raw), &match); err != nil {
 		return nil, fmt.Errorf("failed to parse match response: %w", err)
 	}
+	match.Refs = dedupeOverlaps(match.Refs)
+	for i := range match.Refs {
+		match.Refs[i].Quotes = validQuotes(chunk, match.Refs[i].Quotes)
+	}
 	return &match, nil
+}
+
+func dedupeOverlaps(refs []verseRef) []verseRef {
+	out := make([]verseRef, 0, len(refs))
+	for _, r := range refs {
+		dup := false
+		for _, o := range out {
+			if r.BookID != nil && o.BookID != nil && *r.BookID == *o.BookID &&
+				intEq(r.Chapter, o.Chapter) && rangesOverlap(r, o) {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func intEq(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func rangesOverlap(a, b verseRef) bool {
+	if a.VerseStart == nil || b.VerseStart == nil { // whole chapter overlaps everything in it
+		return true
+	}
+	aEnd, bEnd := *a.VerseStart, *b.VerseStart
+	if a.VerseEnd != nil {
+		aEnd = *a.VerseEnd
+	}
+	if b.VerseEnd != nil {
+		bEnd = *b.VerseEnd
+	}
+	return *a.VerseStart <= bEnd && *b.VerseStart <= aEnd
+}
+
+var quoteFixer = strings.NewReplacer("’", "'", "‘", "'", "“", `"`, "”", `"`, "–", "-", "—", "-")
+
+func normalize(s string) string {
+	return strings.ToLower(strings.Join(strings.Fields(quoteFixer.Replace(s)), " "))
+}
+
+func validQuote(chunk, quote string) *string {
+	q := strings.TrimSpace(quote)
+	if q == "" || !strings.Contains(normalize(chunk), normalize(q)) {
+		return nil
+	}
+	return &q
+}
+
+func validQuotes(chunk string, quotes []string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, q := range quotes {
+		v := validQuote(chunk, q)
+		if v == nil || seen[normalize(*v)] {
+			log.Printf("quote rejected: %q", q)
+			continue
+		}
+		seen[normalize(*v)] = true
+		out = append(out, *v)
+	}
+	return out
 }
 
 var defaultClient = gemini.NewClient()
