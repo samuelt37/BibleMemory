@@ -34,7 +34,10 @@ export function RefsBox({
     for (const c of chunks) {
       for (const r of c.refs ?? []) {
         const key = refKey(r);
-        if (!seen.has(key)) seen.set(key, r);
+        const existing = seen.get(key);
+        if (!existing || (existing.source !== "user" && r.source === "user")) {
+          seen.set(key, r);
+        }
       }
     }
     return [...seen.values()].sort(

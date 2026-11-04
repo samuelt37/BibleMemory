@@ -4,10 +4,13 @@ import { ChevronLeft } from "lucide-react";
 import { useAuth } from "@clerk/clerk-react";
 
 import { NoteView } from "../components/NoteView";
-import type { Chunk, VerseRef } from "@/features/references/types";
+import {
+  fetchChunks,
+  type Chunk,
+  type VerseRef,
+} from "@/features/references";
 import { RefsBox } from "@/features/references/components/RefBox";
 import { RetagButton } from "@/features/references/components/RetagButton";
-import { API_URL } from "@/constants/config";
 import {
   useTextSelection,
   type SelectionInfo,
@@ -37,14 +40,15 @@ export function NoteDetailPage() {
   const { selection, clear } = useTextSelection(noteRef);
 
   const loadChunks = useCallback(async () => {
-    if (!id) return;
+    const noteId = Number(id);
+    if (!id || Number.isNaN(noteId)) return;
     setChunksLoading(true);
     try {
       const token = await getToken();
-      const res = await fetch(`${API_URL}/notes/${id}/chunks`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setChunks(await res.json());
+      const data = await fetchChunks(noteId, token);
+      setChunks(data);
+    } catch (err) {
+      console.error("Failed to load chunks:", err);
     } finally {
       setChunksLoading(false);
     }

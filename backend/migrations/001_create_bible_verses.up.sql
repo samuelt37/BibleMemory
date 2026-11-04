@@ -99,3 +99,6 @@ ALTER TABLE chunk_refs
 ALTER TABLE chunk_refs
   ADD CONSTRAINT chunk_refs_unique UNIQUE NULLS NOT DISTINCT
     (chunk_id, book_id, chapter, verse_start, end_book_id, end_chapter, verse_end);
+
+ALTER TABLE chunk_refs
+  ADD COLUMN IF NOT EXISTS quotes JSONB;

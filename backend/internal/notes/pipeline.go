@@ -149,15 +149,22 @@ func matchChunkToVerse(ctx context.Context, client *gemini.Client, chunk string,
 func dedupeOverlaps(refs []verseRef) []verseRef {
 	out := make([]verseRef, 0, len(refs))
 	for _, r := range refs {
-		dup := false
-		for _, o := range out {
+		merged := false
+		for i, o := range out {
 			if r.BookID != nil && o.BookID != nil && *r.BookID == *o.BookID &&
 				intEq(r.Chapter, o.Chapter) && rangesOverlap(r, o) {
-				dup = true
+				if o.VerseStart == nil && r.VerseStart != nil {
+					// r is more specific than o; replace o with r and preserve quotes
+					r.Quotes = append(r.Quotes, o.Quotes...)
+					out[i] = r
+				} else {
+					out[i].Quotes = append(out[i].Quotes, r.Quotes...)
+				}
+				merged = true
 				break
 			}
 		}
-		if !dup {
+		if !merged {
 			out = append(out, r)
 		}
 	}

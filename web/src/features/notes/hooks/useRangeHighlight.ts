@@ -5,8 +5,7 @@ const FOLD: Record<string, string> = {
 };
 const fold = (ch: string) => (FOLD[ch] ?? ch).toLowerCase();
 
-export function findRanges(root: HTMLElement, needle: string): Range[] {
-  // normalize the needle the same way as the page text
+function normalizeNeedle(needle: string): string {
   let target = "";
   let prev = true;
   for (const ch of needle) {
@@ -15,9 +14,15 @@ export function findRanges(root: HTMLElement, needle: string): Range[] {
     target += sp ? " " : fold(ch);
     prev = sp;
   }
-  target = target.trim();
-  if (!target) return [];
+  return target.trim();
+}
 
+interface TextMap {
+  hay: string;
+  map: { node: Text; offset: number }[];
+}
+
+function buildTextMap(root: HTMLElement): TextMap {
   let hay = "";
   const map: { node: Text; offset: number }[] = [];
   let prevSpace = true;
@@ -36,21 +41,37 @@ export function findRanges(root: HTMLElement, needle: string): Range[] {
       prevSpace = isSpace;
     }
   }
+  return { hay, map };
+}
 
+export function findAllRanges(root: HTMLElement, texts: string[]): Range[] {
+  const needles = Array.from(
+    new Set(texts.map(normalizeNeedle).filter((t) => t.length > 0)),
+  );
+  if (needles.length === 0) return [];
+
+  const { hay, map } = buildTextMap(root);
   const ranges: Range[] = [];
-  let from = 0;
-  for (;;) {
-    const idx = hay.indexOf(target, from);
-    if (idx < 0) break;
-    const s = map[idx];
-    const e = map[idx + target.length - 1];
-    const r = new Range();
-    r.setStart(s.node, s.offset);
-    r.setEnd(e.node, e.offset + 1);
-    ranges.push(r);
-    from = idx + target.length;
+
+  for (const target of needles) {
+    let from = 0;
+    for (;;) {
+      const idx = hay.indexOf(target, from);
+      if (idx < 0) break;
+      const s = map[idx];
+      const e = map[idx + target.length - 1];
+      const r = new Range();
+      r.setStart(s.node, s.offset);
+      r.setEnd(e.node, e.offset + 1);
+      ranges.push(r);
+      from = idx + target.length;
+    }
   }
   return ranges;
+}
+
+export function findRanges(root: HTMLElement, needle: string): Range[] {
+  return findAllRanges(root, [needle]);
 }
 
 export function useRangeHighlight(
@@ -62,9 +83,15 @@ export function useRangeHighlight(
   useEffect(() => {
     if (!("highlights" in CSS)) return; // unsupported browser: no-op
     const el = containerRef.current;
-    if (!el || texts.length === 0) return;
-    const ranges = texts.flatMap((t) => findRanges(el, t));
-    if (ranges.length === 0) return;
+    if (!el || texts.length === 0) {
+      CSS.highlights.delete(name);
+      return;
+    }
+    const ranges = findAllRanges(el, texts);
+    if (ranges.length === 0) {
+      CSS.highlights.delete(name);
+      return;
+    }
     CSS.highlights.set(name, new Highlight(...ranges));
     return () => {
       CSS.highlights.delete(name);
@@ -84,7 +111,7 @@ function getScrollParent(el: Element | null): HTMLElement | null {
 }
 
 export function scrollToText(root: HTMLElement, texts: string[]) {
-  const ranges = texts.flatMap((t) => findRanges(root, t));
+  const ranges = findAllRanges(root, texts);
   if (ranges.length === 0) return;
 
   // if the text appears more than once, pick the match closest to the middle of the screen

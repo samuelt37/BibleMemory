@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io"
 	"log"
+	"mime"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -74,6 +76,11 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	defer func() {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+	}()
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
@@ -91,11 +98,16 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The sniffer misses some formats (HEIC, .mov), so fall back to the client's header
+	// The sniffer misses some formats (HEIC, .mov), so fall back to the client's header or file extension
 	if mimeType == "application/octet-stream" {
 		ct, _, _ := strings.Cut(header.Header.Get("Content-Type"), ";")
 		if strings.HasPrefix(ct, "video/") || strings.HasPrefix(ct, "image/") {
 			mimeType = ct
+		} else if extType := mime.TypeByExtension(filepath.Ext(header.Filename)); extType != "" {
+			extType, _, _ = strings.Cut(extType, ";")
+			if strings.HasPrefix(extType, "video/") || strings.HasPrefix(extType, "image/") {
+				mimeType = extType
+			}
 		}
 	}
 

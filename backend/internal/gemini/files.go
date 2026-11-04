@@ -39,10 +39,11 @@ func (c *Client) UploadFile(ctx context.Context, r io.Reader, size int64, mimeTy
 	if err != nil {
 		return nil, err
 	}
+	bodyBytes, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	uploadURL := resp.Header.Get("X-Goog-Upload-URL")
 	if uploadURL == "" {
-		return nil, fmt.Errorf("files api: no upload url (status %d)", resp.StatusCode)
+		return nil, fmt.Errorf("files api: no upload url (status %d: %s)", resp.StatusCode, string(bodyBytes))
 	}
 
 	req, _ = http.NewRequestWithContext(ctx, http.MethodPost, uploadURL, r)

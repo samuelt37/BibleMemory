@@ -382,13 +382,18 @@ func (r *ChunkRepository) CreateWithRefs(ctx context.Context, userID, noteID int
 	}
 
 	for _, ref := range refs {
+		var quotesArg any
+		if len(ref.Quotes) > 0 {
+			b, _ := json.Marshal(ref.Quotes)
+			quotesArg = string(b)
+		}
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO chunk_refs (user_id, note_id, chunk_id, book_id, chapter, verse_start,
-									end_book_id, end_chapter, verse_end, source)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'user')
+									end_book_id, end_chapter, verse_end, source, quotes)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'user', $10::jsonb)
 			ON CONFLICT DO NOTHING`,
 			userID, noteID, chunkID, ref.BookID, ref.Chapter, ref.VerseStart,
-			ref.EndBookID, ref.EndChapter, ref.VerseEnd)
+			ref.EndBookID, ref.EndChapter, ref.VerseEnd, quotesArg)
 		if err != nil {
 			return 0, err
 		}
