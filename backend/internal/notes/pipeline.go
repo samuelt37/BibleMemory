@@ -46,7 +46,7 @@ func extractTextFromVideo(ctx context.Context, client *gemini.Client, f *gemini.
 						"mime_type": f.MimeType,
 						"file_uri":  f.URI,
 					}},
-					{"text": "Transcribe all spoken content in this video as plain text. Include relevant on-screen text. Return ONLY the transcript, with no commentary, timestamps, or headers."},
+					{"text": "Transcribe every word spoken in this video's audio track, verbatim. Ignore slides and on-screen text entirely. Do not summarize, condense, or skip anything. Return ONLY the spoken words, with no commentary, headers, or timestamps."},
 				},
 			},
 		},

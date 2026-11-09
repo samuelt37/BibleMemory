@@ -1,5 +1,13 @@
 import { useState, useRef, useEffect } from "react";
-import { Upload, FileText, X, Download, Type } from "lucide-react";
+import {
+  Upload,
+  FileText,
+  X,
+  Download,
+  Type,
+  Loader2,
+  AlertCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   useNotesList,
@@ -55,6 +63,16 @@ export function NotesPage() {
   const [pasteText, setPasteText] = useState("");
   const [searchText, setSearchText] = useState(q);
 
+  interface ActiveUpload {
+    id: string;
+    filename: string;
+    fileSize: number;
+    percent: number;
+    stage: "requesting_url" | "uploading" | "completing";
+    error?: string;
+  }
+  const [activeUploads, setActiveUploads] = useState<ActiveUpload[]>([]);
+
   const { data: noteCounts } = useQuery({
     queryKey: ["note-counts-by-book"],
     queryFn: async () => fetchNoteCountsByBook(await getToken()),
@@ -99,7 +117,46 @@ export function NotesPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    Array.from(files).forEach((file) => uploadNote(file));
+
+    Array.from(files).forEach((file) => {
+      const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      setActiveUploads((prev) => [
+        ...prev,
+        {
+          id: uploadId,
+          filename: file.name,
+          fileSize: file.size,
+          percent: 0,
+          stage: "requesting_url",
+        },
+      ]);
+
+      uploadNote(
+        {
+          file,
+          onProgress: ({ percent, stage }) => {
+            setActiveUploads((prev) =>
+              prev.map((u) => (u.id === uploadId ? { ...u, percent, stage } : u)),
+            );
+          },
+        },
+        {
+          onSuccess: () => {
+            setActiveUploads((prev) => prev.filter((u) => u.id !== uploadId));
+          },
+          onError: (err: any) => {
+            console.error(`Upload failed for ${file.name}:`, err);
+            setActiveUploads((prev) =>
+              prev.map((u) =>
+                u.id === uploadId
+                  ? { ...u, error: err?.message || "Upload failed" }
+                  : u,
+              ),
+            );
+          },
+        },
+      );
+    });
     e.target.value = "";
   };
 
@@ -116,6 +173,8 @@ export function NotesPage() {
     window.open(url, "_blank");
   };
 
+  const isUploadingActive = activeUploads.some((u) => !u.error);
+
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
@@ -126,9 +185,21 @@ export function NotesPage() {
               <Type size={16} className="mr-2" />
               Paste text
             </Button>
-            <Button onClick={() => fileInputRef.current?.click()}>
-              <Upload size={16} className="mr-2" />
-              Upload note
+            <Button
+              disabled={isUploadingActive}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {isUploadingActive ? (
+                <>
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                  Uploading…
+                </>
+              ) : (
+                <>
+                  <Upload size={16} className="mr-2" />
+                  Upload note
+                </>
+              )}
             </Button>
           </div>
           <input
@@ -177,6 +248,72 @@ export function NotesPage() {
             </button>
           )}
         </div>
+
+        {activeUploads.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {activeUploads.map((u) => (
+              <div
+                key={u.id}
+                className={`p-3.5 border rounded-lg ${
+                  u.error
+                    ? "border-destructive/40 bg-destructive/5 text-destructive"
+                    : "border-primary/20 bg-card text-card-foreground shadow-xs"
+                } flex flex-col gap-2`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {u.error ? (
+                      <AlertCircle size={18} className="text-destructive shrink-0" />
+                    ) : (
+                      <Loader2 size={18} className="text-primary animate-spin shrink-0" />
+                    )}
+                    <p className="text-sm font-medium truncate">{u.filename}</p>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      ({formatFileSize(u.fileSize)})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-semibold">
+                      {u.error ? "Failed" : `${u.percent}%`}
+                    </span>
+                    {u.error && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setActiveUploads((prev) =>
+                            prev.filter((item) => item.id !== u.id),
+                          )
+                        }
+                        className="rounded p-1 text-muted-foreground hover:bg-accent/10 hover:text-foreground"
+                        aria-label="Dismiss"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {u.error ? (
+                  <p className="text-xs text-destructive">{u.error}</p>
+                ) : (
+                  <>
+                    <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-primary h-full transition-all duration-200"
+                        style={{ width: `${Math.max(5, u.percent)}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {u.stage === "requesting_url" && "Preparing upload..."}
+                      {u.stage === "uploading" && `Uploading to storage (${u.percent}%)...`}
+                      {u.stage === "completing" && "Finalizing and starting note processing..."}
+                    </p>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {pasteMode && (
           <div className="p-4 border rounded-lg bg-card flex flex-col gap-2">

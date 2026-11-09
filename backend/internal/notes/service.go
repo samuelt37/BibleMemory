@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"mime/multipart"
 	"path"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -104,7 +107,7 @@ func (s *Service) UploadNote(ctx context.Context, userID int, file multipart.Fil
 func (s *Service) processVideo(userID, noteID int, key string, size int64, mimeType string) {
 	log.Println("processVideo: starting for note", noteID, "size:", size, "bytes")
 
-	extractCtx, cancelExtract := context.WithTimeout(context.Background(), 20*time.Minute)
+	extractCtx, cancelExtract := context.WithTimeout(context.Background(), 40*time.Minute)
 	defer cancelExtract()
 
 	obj, err := s.r2.Download(extractCtx, key)
@@ -461,4 +464,124 @@ func (s *Service) NoteCountsByBook(ctx context.Context, userID int) (map[int]int
 		counts[r.BookID] = r.Count
 	}
 	return counts, nil
+}
+
+const maxPresignedVideoBytes = 1 << 30 // 1GB; Gemini's Files API tops out around 2GB per file
+
+func isVideoExtension(ext string) (string, bool) {
+	switch strings.ToLower(ext) {
+	case ".mp4", ".m4v":
+		return "video/mp4", true
+	case ".mov":
+		return "video/quicktime", true
+	case ".webm":
+		return "video/webm", true
+	case ".mkv":
+		return "video/x-matroska", true
+	case ".avi":
+		return "video/x-msvideo", true
+	case ".wmv":
+		return "video/x-ms-wmv", true
+	case ".3gp":
+		return "video/3gpp", true
+	default:
+		return "", false
+	}
+}
+
+func resolveVideoMimeType(filename, mimeType string) string {
+	if strings.HasPrefix(mimeType, "video/") {
+		return mimeType
+	}
+	if videoMime, ok := isVideoExtension(filepath.Ext(filename)); ok {
+		return videoMime
+	}
+	if extType := mime.TypeByExtension(filepath.Ext(filename)); extType != "" {
+		extType, _, _ = strings.Cut(extType, ";")
+		if strings.HasPrefix(extType, "video/") {
+			return extType
+		}
+	}
+	return mimeType
+}
+
+func (s *Service) PresignVideoUpload(ctx context.Context, userID int, filename, contentType string, size int64) (url, key string, err error) {
+	key = fmt.Sprintf("users/%d/%s-%s", userID, uuid.NewString(), path.Base(filename))
+	url, err = s.r2.PresignedPutURL(ctx, key, contentType, 30*time.Minute)
+	return url, key, err
+}
+
+func (s *Service) CompleteVideoUpload(ctx context.Context, userID int, key, filename string) (*Note, error) {
+	// the key must belong to this user, otherwise anyone could claim anyone's object
+	if !strings.HasPrefix(key, fmt.Sprintf("users/%d/", userID)) {
+		return nil, errors.New("invalid key")
+	}
+
+	// don't trust the client: check what actually landed in R2
+	size, mimeType, err := s.r2.Head(ctx, key)
+	if err != nil {
+		return nil, fmt.Errorf("object not found: %w", err)
+	}
+
+	mimeType = resolveVideoMimeType(filename, mimeType)
+	if !strings.HasPrefix(mimeType, "video/") || size <= 0 || size > maxPresignedVideoBytes {
+		_ = s.r2.Delete(ctx, key)
+		return nil, errors.New("invalid video")
+	}
+
+	note, err := s.repo.CreateNote(userID, filename, key, mimeType, size)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("CompleteVideoUpload: verified in R2 for note %q (noteID: %d, size: %d, mime: %q)", filename, note.ID, size, mimeType)
+	go s.processVideo(userID, note.ID, key, size, mimeType)
+	return note, nil
+}
+
+const videoPartSize = 16 << 20 // R2 needs parts of equal size (except the last) and >= 5MiB
+
+type VideoMultipart struct {
+	Key      string   `json:"key"`
+	UploadID string   `json:"uploadId"`
+	PartSize int64    `json:"partSize"`
+	URLs     []string `json:"urls"`
+}
+
+func (s *Service) StartVideoMultipart(ctx context.Context, userID int, filename, contentType string, size int64) (*VideoMultipart, error) {
+	contentType = resolveVideoMimeType(filename, contentType)
+	if !strings.HasPrefix(contentType, "video/") || size <= 0 || size > maxPresignedVideoBytes {
+		return nil, errors.New("invalid video")
+	}
+
+	key := fmt.Sprintf("users/%d/%s-%s", userID, uuid.NewString(), path.Base(filename))
+	uploadID, err := s.r2.CreateMultipartUpload(ctx, key, contentType)
+	if err != nil {
+		return nil, err
+	}
+
+	n := int((size + videoPartSize - 1) / videoPartSize)
+	urls := make([]string, n)
+	for i := range urls {
+		u, err := s.r2.PresignUploadPart(ctx, key, uploadID, int32(i+1), 2*time.Hour)
+		if err != nil {
+			s.r2.AbortMultipartUpload(ctx, key, uploadID)
+			return nil, err
+		}
+		urls[i] = u
+	}
+	return &VideoMultipart{Key: key, UploadID: uploadID, PartSize: videoPartSize, URLs: urls}, nil
+}
+
+func (s *Service) FinishVideoMultipart(ctx context.Context, userID int, key, uploadID, filename string, parts []storage.CompletedPart) (*Note, error) {
+	if !strings.HasPrefix(key, fmt.Sprintf("users/%d/", userID)) {
+		return nil, errors.New("invalid key")
+	}
+	sort.Slice(parts, func(i, j int) bool { return parts[i].PartNumber < parts[j].PartNumber })
+
+	if err := s.r2.CompleteMultipartUpload(ctx, key, uploadID, parts); err != nil {
+		return nil, fmt.Errorf("complete multipart: %w", err)
+	}
+	// from here it's the same as before: Head check, CreateNote, go processVideo
+	return s.CompleteVideoUpload(ctx, userID, key, filename)
 }

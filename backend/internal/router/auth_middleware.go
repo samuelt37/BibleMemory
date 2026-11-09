@@ -22,6 +22,7 @@ func RequireAuth(userService *user.Service) func(http.Handler) http.Handler {
 				Token: sessionToken,
 			})
 			if err != nil {
+				log.Printf("RequireAuth: jwt.Verify failed for %s %s: %v", r.Method, r.URL.Path, err)
 				http.Error(w, "invalid or expired token", http.StatusUnauthorized)
 				return
 			}

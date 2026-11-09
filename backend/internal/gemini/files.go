@@ -8,16 +8,28 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
 const filesBase = "https://generativelanguage.googleapis.com"
 
 type File struct {
-	Name     string `json:"name"`
-	URI      string `json:"uri"`
-	MimeType string `json:"mimeType"`
-	State    string `json:"state"`
+	Name          string `json:"name"`
+	URI           string `json:"uri"`
+	MimeType      string `json:"mimeType"`
+	State         string `json:"state"`
+	VideoMetadata struct {
+		VideoDuration string `json:"videoDuration"` // e.g. "3600.5s"
+	} `json:"videoMetadata"`
+}
+
+func (f *File) DurationSeconds() float64 {
+	d, err := strconv.ParseFloat(strings.TrimSuffix(f.VideoMetadata.VideoDuration, "s"), 64)
+	if err != nil {
+		return 0
+	}
+	return d
 }
 
 func (c *Client) UploadFile(ctx context.Context, r io.Reader, size int64, mimeType, displayName string) (*File, error) {

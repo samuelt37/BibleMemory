@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/samuelt37/BibleMemory/internal/auth"
+	"github.com/samuelt37/BibleMemory/internal/storage"
 )
 
 type Handler struct {
@@ -26,7 +27,10 @@ func NewHandler(s *Service) *Handler {
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/notes", h.Upload)
 	r.Post("/notes/text", h.UploadText)
+	r.Post("/notes/video/upload-url", h.VideoUploadURL)
+	r.Post("/notes/video", h.VideoComplete)
 	r.Get("/notes", h.List)
+	r.Get("/notes/counts-by-book", h.CountsByBook)
 	r.Get("/notes/{id}/download", h.DownloadURL)
 	r.Get("/notes/{id}/chunks", h.ListChunks)
 	r.Delete("/notes/{id}", h.Delete)
@@ -34,12 +38,13 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Post("/notes/{id}/rereference", h.ReRefNotes)
 	r.Post("/notes/{id}/chunks", h.CreateChunk)
 	r.Delete("/notes/{id}/refs", h.DeleteRef)
-	r.Get("/notes/counts-by-book", h.CountsByBook)
+	r.Post("/notes/video/multipart/start", h.VideoMultipartStart)
+	r.Post("/notes/video/multipart/complete", h.VideoMultipartComplete)
 }
 
 const (
 	maxDocBytes   = 20 << 20  // images, PDFs, text
-	maxVideoBytes = 300 << 20 // videos
+	maxVideoBytes = 500 << 20 // videos
 )
 
 var allowedTypes = map[string]bool{
@@ -425,4 +430,129 @@ func (h *Handler) CountsByBook(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(counts) // {"1": 4, "43": 12}
+}
+
+func (h *Handler) VideoUploadURL(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Filename    string `json:"filename"`
+		ContentType string `json:"contentType"`
+		Size        int64  `json:"size"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	contentType := resolveVideoMimeType(req.Filename, req.ContentType)
+	if !strings.HasPrefix(contentType, "video/") {
+		log.Printf("VideoUploadURL: rejected unsupported MIME type %q for file %q", req.ContentType, req.Filename)
+		http.Error(w, "unsupported file type", http.StatusUnsupportedMediaType)
+		return
+	}
+	if req.Size <= 0 || req.Size > maxPresignedVideoBytes {
+		log.Printf("VideoUploadURL: rejected invalid size %d for file %q", req.Size, req.Filename)
+		http.Error(w, "video too large (max 1GB)", http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	log.Printf("VideoUploadURL: generating presigned URL for user %d (file: %q, type: %s, size: %d bytes)", userID, req.Filename, contentType, req.Size)
+	url, key, err := h.service.PresignVideoUpload(r.Context(), userID, req.Filename, contentType, req.Size)
+	if err != nil {
+		log.Println("VideoUploadURL:", err)
+		http.Error(w, "could not create upload url", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"url": url, "key": key})
+}
+
+func (h *Handler) VideoComplete(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Key      string `json:"key"`
+		Filename string `json:"filename"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("VideoComplete: finalizing upload for user %d (key: %q, filename: %q)", userID, req.Key, req.Filename)
+	note, err := h.service.CompleteVideoUpload(r.Context(), userID, req.Key, req.Filename)
+	if err != nil {
+		log.Println("VideoComplete:", err)
+		http.Error(w, "upload failed", http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(note)
+}
+
+func (h *Handler) VideoMultipartStart(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var req struct {
+		Filename    string `json:"filename"`
+		ContentType string `json:"contentType"`
+		Size        int64  `json:"size"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if req.Size > maxPresignedVideoBytes {
+		http.Error(w, "video too large (max 1GB)", http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	mp, err := h.service.StartVideoMultipart(r.Context(), userID, req.Filename, req.ContentType, req.Size)
+	if err != nil {
+		log.Println("VideoMultipartStart:", err)
+		http.Error(w, "could not start upload", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(mp)
+}
+
+func (h *Handler) VideoMultipartComplete(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var req struct {
+		Key      string                  `json:"key"`
+		UploadID string                  `json:"uploadId"`
+		Filename string                  `json:"filename"`
+		Parts    []storage.CompletedPart `json:"parts"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	note, err := h.service.FinishVideoMultipart(r.Context(), userID, req.Key, req.UploadID, req.Filename, req.Parts)
+	if err != nil {
+		log.Println("VideoMultipartComplete:", err)
+		http.Error(w, "upload failed", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(note)
 }
