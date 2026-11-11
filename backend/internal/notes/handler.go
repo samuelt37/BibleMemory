@@ -40,6 +40,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Delete("/notes/{id}/refs", h.DeleteRef)
 	r.Post("/notes/video/multipart/start", h.VideoMultipartStart)
 	r.Post("/notes/video/multipart/complete", h.VideoMultipartComplete)
+	r.Get("/notes/{id}/media", h.Media)
 }
 
 const (
@@ -555,4 +556,35 @@ func (h *Handler) VideoMultipartComplete(w http.ResponseWriter, r *http.Request)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(note)
+}
+
+func (h *Handler) Media(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	noteID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	media, err := h.service.GetMedia(r.Context(), userID, noteID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			http.Error(w, "note not found", http.StatusNotFound)
+			return
+		}
+		log.Printf("media note=%d: %v", noteID, err)
+		http.Error(w, "could not load media", http.StatusInternalServerError)
+		return
+	}
+	if media == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(media)
 }

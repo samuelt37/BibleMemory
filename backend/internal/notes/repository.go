@@ -145,7 +145,7 @@ func NewChunkRepository(db *sql.DB) *ChunkRepository {
 	return &ChunkRepository{db: db}
 }
 
-func (r *ChunkRepository) Create(userID, noteID int, content string, embedding []float32, refs []verseRef) error {
+func (r *ChunkRepository) Create(userID, noteID int, content string, embedding []float32, refs []verseRef, startSeconds *int) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return err
@@ -154,10 +154,10 @@ func (r *ChunkRepository) Create(userID, noteID int, content string, embedding [
 
 	var chunkID int
 	err = tx.QueryRow(
-		`INSERT INTO note_chunks (note_id, user_id, content, embedding)
-		 VALUES ($1, $2, $3, $4)
+		`INSERT INTO note_chunks (note_id, user_id, content, embedding, start_seconds)
+		 VALUES ($1, $2, $3, $4, $5)
 		 RETURNING id`,
-		noteID, userID, content, pgvector.NewVector(embedding),
+		noteID, userID, content, pgvector.NewVector(embedding), startSeconds,
 	).Scan(&chunkID)
 	if err != nil {
 		return err
@@ -191,7 +191,7 @@ func (r *ChunkRepository) Create(userID, noteID int, content string, embedding [
 
 func (r *ChunkRepository) ListByNote(noteID int) ([]Chunk, error) {
 	rows, err := r.db.Query(
-		`SELECT c.id, c.note_id, c.content,
+		`SELECT c.id, c.note_id, c.content, c.start_seconds,
 		        COALESCE(
 		          json_agg(json_build_object(
 		            'id', cr.id, 'bookId', cr.book_id, 'endBookId', cr.end_book_id,
@@ -217,7 +217,7 @@ func (r *ChunkRepository) ListByNote(noteID int) ([]Chunk, error) {
 	for rows.Next() {
 		var c Chunk
 		var raw []byte
-		if err := rows.Scan(&c.ID, &c.NoteID, &c.Content, &raw); err != nil {
+		if err := rows.Scan(&c.ID, &c.NoteID, &c.Content, &c.StartSeconds, &raw); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(raw, &c.Refs); err != nil {
@@ -364,7 +364,7 @@ func (r *ChunkRepository) ReplaceRefs(userID, noteID, chunkID int, refs []verseR
 	return tx.Commit()
 }
 
-func (r *ChunkRepository) CreateWithRefs(ctx context.Context, userID, noteID int, content string, embedding []float32, refs []verseRef) (int, error) {
+func (r *ChunkRepository) CreateWithRefs(ctx context.Context, userID, noteID int, content string, embedding []float32, refs []verseRef, startSeconds *int) (int, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -373,10 +373,10 @@ func (r *ChunkRepository) CreateWithRefs(ctx context.Context, userID, noteID int
 
 	var chunkID int
 	err = tx.QueryRowContext(ctx, `
-		INSERT INTO note_chunks (note_id, user_id, content, embedding, source)
-		VALUES ($1, $2, $3, $4, 'user')
+		INSERT INTO note_chunks (note_id, user_id, content, embedding, source, start_seconds)
+		VALUES ($1, $2, $3, $4, 'user', $5)
 		RETURNING id`,
-		noteID, userID, content, pgvector.NewVector(embedding)).Scan(&chunkID)
+		noteID, userID, content, pgvector.NewVector(embedding), startSeconds).Scan(&chunkID)
 	if err != nil {
 		return 0, err
 	}
@@ -460,4 +460,28 @@ func (r *ChunkRepository) CountByBook(ctx context.Context, userID int) ([]BookNo
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+func (r *Repository) SaveSegments(noteID int, segs []Segment) error {
+	b, err := json.Marshal(segs)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Exec(`UPDATE notes SET segments = $1 WHERE id = $2`, b, noteID)
+	return err
+}
+
+func (r *Repository) GetSegments(noteID int) ([]Segment, error) {
+	var b []byte
+	if err := r.db.QueryRow(`SELECT segments FROM notes WHERE id = $1`, noteID).Scan(&b); err != nil {
+		return nil, err
+	}
+	if len(b) == 0 {
+		return nil, nil // text/pdf/old notes have no segments
+	}
+	var segs []Segment
+	if err := json.Unmarshal(b, &segs); err != nil {
+		return nil, err
+	}
+	return segs, nil
 }

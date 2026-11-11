@@ -132,11 +132,16 @@ func (s *Service) processVideo(userID, noteID int, key string, size int64, mimeT
 		s.repo.UpdateStatus(noteID, "failed")
 		return
 	}
+	clean, segs := parseTimestamped(text)
 
-	if err := s.repo.UpdateRawText(noteID, text); err != nil {
+	if err := s.repo.UpdateRawText(noteID, clean); err != nil {
 		log.Println("processVideo: failed to save extracted text for note", noteID, ":", err)
 		s.repo.UpdateStatus(noteID, "failed")
 		return
+	}
+
+	if err := s.repo.SaveSegments(noteID, segs); err != nil {
+		log.Println("processVideo: failed to save segments for note", noteID, ":", err)
 	}
 
 	// Fresh budget for chunk -> tag -> embed, so a slow upload can't starve it
@@ -278,6 +283,20 @@ func (s *Service) ProcessNote(ctx context.Context, userID, noteID int) error {
 	chunks := chunkText(*note.RawText, 400)
 	log.Println("ProcessNote: chunked into", len(chunks), "pieces")
 
+	segs, _ := s.repo.GetSegments(noteID)
+	starts := make([]*int, len(chunks))
+	if len(segs) > 0 {
+		from := 0
+		for i, c := range chunks {
+			if idx := findFrom(*note.RawText, from, c); idx >= 0 {
+				starts[i] = secondsAt(segs, idx)
+				from = idx + 1
+			} else if i > 0 {
+				starts[i] = starts[i-1]
+			}
+		}
+	}
+
 	bookList, err := s.buildBookList()
 	if err != nil {
 		s.repo.UpdateStatus(noteID, "failed")
@@ -297,8 +316,13 @@ func (s *Service) ProcessNote(ctx context.Context, userID, noteID int) error {
 
 			match, err := s.matchChunk(ctx, c, bookList)
 			if err != nil {
-				results[idx] = chunkResult{content: c, err: err}
-				return
+				// rate limits and cancellations still fail the note; a bad response doesn't
+				if errors.Is(err, ErrRateLimited) || ctx.Err() != nil {
+					results[idx] = chunkResult{content: c, err: err}
+					return
+				}
+				log.Printf("ProcessNote: chunk %d tagging failed, saving untagged: %v", idx, err)
+				match = &chunkMatch{} // no refs; Retag can fill it in later
 			}
 			embedding, err := s.gemini.EmbedText(ctx, c, 768)
 			if err != nil {
@@ -316,7 +340,7 @@ func (s *Service) ProcessNote(ctx context.Context, userID, noteID int) error {
 			s.repo.UpdateStatus(noteID, "failed")
 			return r.err
 		}
-		if err := s.chunkRepo.Create(userID, noteID, r.content, r.embedding, validRefs(r.match.Refs)); err != nil {
+		if err := s.chunkRepo.Create(userID, noteID, r.content, r.embedding, validRefs(r.match.Refs), starts[i]); err != nil {
 			log.Println("ProcessNote: insert failed for chunk", i, ":", err)
 			s.repo.UpdateStatus(noteID, "failed")
 			return err
@@ -358,7 +382,7 @@ func (s *Service) ReRefNotes(ctx context.Context, userID, noteID int) error {
 		return err
 	}
 	if note == nil {
-		return err
+		return ErrNotFound
 	}
 
 	chunks, err := s.chunkRepo.ListByNote(noteID)
@@ -401,6 +425,9 @@ func (s *Service) matchChunk(ctx context.Context, content, bookList string) (*ch
 		}
 
 		if !isRateLimited(err) {
+			if attempt == 0 && ctx.Err() == nil {
+				continue // any other failure: try once more
+			}
 			return nil, err
 		}
 		if attempt == 0 {
@@ -434,12 +461,20 @@ func (s *Service) CreateChunk(ctx context.Context, userID, noteID int, in Create
 		return nil, err
 	}
 
-	chunkID, err := s.chunkRepo.CreateWithRefs(ctx, userID, noteID, in.Content, embedding, in.Refs)
+	var start *int
+	if note.RawText != nil {
+		if idx := findFrom(*note.RawText, 0, in.Content); idx >= 0 {
+			segs, _ := s.repo.GetSegments(noteID)
+			start = secondsAt(segs, idx)
+		}
+	}
+
+	chunkID, err := s.chunkRepo.CreateWithRefs(ctx, userID, noteID, in.Content, embedding, in.Refs, start)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Chunk{ID: chunkID, Content: in.Content, Refs: in.Refs}, nil
+	return &Chunk{ID: chunkID, Content: in.Content, Refs: in.Refs, StartSeconds: start}, nil
 }
 
 func (s *Service) DeleteReference(ctx context.Context, userID, noteID int, ref verseRef) ([]DeletedRef, error) {
@@ -584,4 +619,34 @@ func (s *Service) FinishVideoMultipart(ctx context.Context, userID int, key, upl
 	}
 	// from here it's the same as before: Head check, CreateNote, go processVideo
 	return s.CompleteVideoUpload(ctx, userID, key, filename)
+}
+
+// GetMedia returns a playable URL for video/image notes, or nil (no error) for anything else.
+func (s *Service) GetMedia(ctx context.Context, userID, noteID int) (*NoteMedia, error) {
+	note, err := s.repo.GetByID(userID, noteID)
+	if err != nil {
+		return nil, err
+	}
+	if note == nil {
+		return nil, ErrNotFound
+	}
+	if note.R2Key == nil || note.MimeType == nil {
+		return nil, nil // text notes
+	}
+
+	var mediaType string
+	switch {
+	case strings.HasPrefix(*note.MimeType, "video/"):
+		mediaType = "video"
+	case strings.HasPrefix(*note.MimeType, "image/"):
+		mediaType = "image"
+	default:
+		return nil, nil // pdf, plain text, etc.
+	}
+
+	url, err := s.r2.PresignedGetURL(ctx, *note.R2Key, 2*time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	return &NoteMedia{Type: mediaType, URL: url}, nil
 }

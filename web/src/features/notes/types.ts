@@ -15,3 +15,8 @@ export type NoteFilters = {
   book?: string | null;
   chapter?: string | null;
 };
+
+export interface NoteMedia {
+  type: "video" | "image";
+  url: string;
+}

@@ -17,11 +17,12 @@ type Note struct {
 }
 
 type Chunk struct {
-	ID      int        `json:"id"`
-	NoteID  int        `json:"noteId"`
-	UserID  int        `json:"-"`
-	Content string     `json:"content"`
-	Refs    []verseRef `json:"refs"`
+	ID           int        `json:"id"`
+	NoteID       int        `json:"noteId"`
+	UserID       int        `json:"-"`
+	Content      string     `json:"content"`
+	Refs         []verseRef `json:"refs"`
+	StartSeconds *int       `json:"startSeconds,omitempty"`
 }
 
 type NoteChunk = Chunk
@@ -75,4 +76,9 @@ type CreateChunkInput struct {
 type BookNoteCount struct {
 	BookID int
 	Count  int
+}
+
+type NoteMedia struct {
+	Type string `json:"type"` // "video" | "image"
+	URL  string `json:"url"`
 }

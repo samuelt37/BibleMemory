@@ -102,3 +102,6 @@ ALTER TABLE chunk_refs
 
 ALTER TABLE chunk_refs
   ADD COLUMN IF NOT EXISTS quotes JSONB;
+
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS segments JSONB;
+ALTER TABLE note_chunks ADD COLUMN IF NOT EXISTS start_seconds INT;

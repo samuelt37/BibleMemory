@@ -21,6 +21,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useBooks, BookSelect } from "@/features/scripture";
 import { useQuery } from "@tanstack/react-query";
 import { fetchNoteCountsByBook } from "../api/api";
+import { useUploads, startUpload, dismissUpload } from "../uploads/uploadStore";
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -52,7 +53,7 @@ export function NotesPage() {
 
   const { data: notesData, isLoading } = useNotesList({ q, book, chapter });
   const notes = notesData ?? [];
-  const { mutate: uploadNote } = useUploadNote();
+  const { mutateAsync: uploadNoteAsync } = useUploadNote();
   const { mutate: uploadTextNote } = useUploadTextNote();
   const { mutate: deleteNote } = useDeleteNote();
   const { getToken } = useAuth();
@@ -63,15 +64,7 @@ export function NotesPage() {
   const [pasteText, setPasteText] = useState("");
   const [searchText, setSearchText] = useState(q);
 
-  interface ActiveUpload {
-    id: string;
-    filename: string;
-    fileSize: number;
-    percent: number;
-    stage: "requesting_url" | "uploading" | "completing";
-    error?: string;
-  }
-  const [activeUploads, setActiveUploads] = useState<ActiveUpload[]>([]);
+  const activeUploads = useUploads();
 
   const { data: noteCounts } = useQuery({
     queryKey: ["note-counts-by-book"],
@@ -119,43 +112,7 @@ export function NotesPage() {
     if (!files) return;
 
     Array.from(files).forEach((file) => {
-      const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      setActiveUploads((prev) => [
-        ...prev,
-        {
-          id: uploadId,
-          filename: file.name,
-          fileSize: file.size,
-          percent: 0,
-          stage: "requesting_url",
-        },
-      ]);
-
-      uploadNote(
-        {
-          file,
-          onProgress: ({ percent, stage }) => {
-            setActiveUploads((prev) =>
-              prev.map((u) => (u.id === uploadId ? { ...u, percent, stage } : u)),
-            );
-          },
-        },
-        {
-          onSuccess: () => {
-            setActiveUploads((prev) => prev.filter((u) => u.id !== uploadId));
-          },
-          onError: (err: any) => {
-            console.error(`Upload failed for ${file.name}:`, err);
-            setActiveUploads((prev) =>
-              prev.map((u) =>
-                u.id === uploadId
-                  ? { ...u, error: err?.message || "Upload failed" }
-                  : u,
-              ),
-            );
-          },
-        },
-      );
+      startUpload(file, (onProgress) => uploadNoteAsync({ file, onProgress }));
     });
     e.target.value = "";
   };
@@ -263,9 +220,15 @@ export function NotesPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     {u.error ? (
-                      <AlertCircle size={18} className="text-destructive shrink-0" />
+                      <AlertCircle
+                        size={18}
+                        className="text-destructive shrink-0"
+                      />
                     ) : (
-                      <Loader2 size={18} className="text-primary animate-spin shrink-0" />
+                      <Loader2
+                        size={18}
+                        className="text-primary animate-spin shrink-0"
+                      />
                     )}
                     <p className="text-sm font-medium truncate">{u.filename}</p>
                     <span className="text-xs text-muted-foreground shrink-0">
@@ -279,11 +242,7 @@ export function NotesPage() {
                     {u.error && (
                       <button
                         type="button"
-                        onClick={() =>
-                          setActiveUploads((prev) =>
-                            prev.filter((item) => item.id !== u.id),
-                          )
-                        }
+                        onClick={() => dismissUpload(u.id)}
                         className="rounded p-1 text-muted-foreground hover:bg-accent/10 hover:text-foreground"
                         aria-label="Dismiss"
                       >
@@ -305,8 +264,10 @@ export function NotesPage() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {u.stage === "requesting_url" && "Preparing upload..."}
-                      {u.stage === "uploading" && `Uploading to storage (${u.percent}%)...`}
-                      {u.stage === "completing" && "Finalizing and starting note processing..."}
+                      {u.stage === "uploading" &&
+                        `Uploading to storage (${u.percent}%)...`}
+                      {u.stage === "completing" &&
+                        "Finalizing and starting note processing..."}
                     </p>
                   </>
                 )}

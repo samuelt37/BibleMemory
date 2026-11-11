@@ -40,7 +40,7 @@ func extractTextFromFile(ctx context.Context, client *gemini.Client, fileBytes [
 
 const videoWindowSec = 600 // 10 minutes
 
-const videoPrompt = `Transcribe every word spoken in this video's audio track, verbatim. Do not summarize, condense, or skip any speech. Whenever a slide or on-screen text appears or changes, add its text on its own line in the form [Slide: ...] at that point in the transcript. Speech is the priority: never replace spoken words with slide text, and do not describe images. Return ONLY the transcript, with no other commentary or headers.`
+const videoPrompt = `Transcribe every word spoken in this video's audio track, verbatim. Do not summarize, condense, or skip any speech. Start a new paragraph about every 30-60 seconds, and begin each paragraph with the time it starts as [MM:SS], measured from the start of the clip you are given (use [H:MM:SS] past one hour). Put a timestamp only at the start of a paragraph, never mid-sentence and never on every line. When a slide or on-screen text changes to something new, add its text on its own line in the form [Slide: ...] at that point in the transcript. Do not repeat a slide that is still on screen, and ignore countdown timers, clocks, progress bars, and placeholder screens such as "please prepare your hearts for worship". Speech is the priority: never replace spoken words with slide text, and do not describe images. If nobody is speaking during a stretch, return nothing for it. Return ONLY the transcript, with no other commentary or headers.`
 
 func extractTextFromVideo(ctx context.Context, client *gemini.Client, f *gemini.File) (string, error) {
 	dur := f.DurationSeconds()
@@ -55,12 +55,12 @@ func extractTextFromVideo(ctx context.Context, client *gemini.Client, f *gemini.
 		if float64(end) > dur {
 			end = int(math.Ceil(dur))
 		}
-		log.Printf("extractTextFromVideo: window %ds-%ds of %.0fs", start, end, dur)
-
 		part, err := transcribeWindow(ctx, client, f, start, end)
 		if err != nil {
 			return "", fmt.Errorf("window %d-%d: %w", start, end, err)
 		}
+		log.Printf("extractTextFromVideo: window %ds first line: %.60s", start, strings.TrimSpace(part))
+		part = offsetTimestamps(part, start)
 		sb.WriteString(strings.TrimSpace(part))
 		sb.WriteString("\n\n")
 	}
@@ -161,6 +161,11 @@ func matchChunkToVerse(ctx context.Context, client *gemini.Client, chunk string,
 		"contents": []map[string]any{
 			{"parts": []map[string]string{{"text": prompt}}},
 		},
+		"generationConfig": map[string]any{
+			"responseMimeType": "application/json", // forces valid JSON, no fences or chatter
+			"temperature":      0,
+			"maxOutputTokens":  4096,
+		},
 	}
 
 	rawText, err := client.GenerateContent(ctx, body)
@@ -169,9 +174,13 @@ func matchChunkToVerse(ctx context.Context, client *gemini.Client, chunk string,
 	}
 
 	raw := cleanJSONFence(rawText)
+	if strings.TrimSpace(raw) == "" {
+		return nil, fmt.Errorf("failed to parse match response: empty response (chunk len %d)", len(chunk))
+	}
 
 	var match chunkMatch
 	if err := json.Unmarshal([]byte(raw), &match); err != nil {
+		log.Printf("matchChunkToVerse: bad JSON (chunk len %d): %.300s", len(chunk), raw)
 		return nil, fmt.Errorf("failed to parse match response: %w", err)
 	}
 	match.Refs = dedupeOverlaps(match.Refs)

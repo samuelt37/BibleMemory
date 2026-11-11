@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -120,10 +122,15 @@ func (c *Client) generateContent(ctx context.Context, body map[string]any, timeo
 				Candidates []struct {
 					Content struct {
 						Parts []struct {
-							Text string `json:"text"`
+							Text    string `json:"text"`
+							Thought bool   `json:"thought"`
 						} `json:"parts"`
 					} `json:"content"`
+					FinishReason string `json:"finishReason"`
 				} `json:"candidates"`
+				PromptFeedback struct {
+					BlockReason string `json:"blockReason"`
+				} `json:"promptFeedback"`
 			}
 
 			err = json.NewDecoder(resp.Body).Decode(&result)
@@ -132,11 +139,28 @@ func (c *Client) generateContent(ctx context.Context, body map[string]any, timeo
 				return "", fmt.Errorf("failed to decode gemini response: %w", err)
 			}
 
-			if len(result.Candidates) == 0 || len(result.Candidates[0].Content.Parts) == 0 {
+			if result.PromptFeedback.BlockReason != "" {
+				return "", fmt.Errorf("gemini blocked the prompt: %s", result.PromptFeedback.BlockReason)
+			}
+			if len(result.Candidates) == 0 {
 				return "", fmt.Errorf("empty candidates in gemini response")
 			}
 
-			return result.Candidates[0].Content.Parts[0].Text, nil
+			cand := result.Candidates[0]
+			var sb strings.Builder
+			for _, p := range cand.Content.Parts {
+				if !p.Thought {
+					sb.WriteString(p.Text)
+				}
+			}
+			text := sb.String()
+			if strings.TrimSpace(text) == "" {
+				return "", fmt.Errorf("empty gemini response (model %s, finishReason %q)", modelName, cand.FinishReason)
+			}
+			if cand.FinishReason != "" && cand.FinishReason != "STOP" {
+				log.Printf("gemini: model %s finished with %q (output may be cut off)", modelName, cand.FinishReason)
+			}
+			return text, nil
 		}
 	}
 

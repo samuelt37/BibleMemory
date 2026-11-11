@@ -1,5 +1,6 @@
 import type { VerseRef, Chunk, DeletedRef } from "@/features/references";
 import { apiFetch } from "@/lib/api";
+import type { NoteMedia } from "../types";
 
 export async function createChunk(
   noteId: number,
@@ -43,5 +44,15 @@ export async function fetchNoteCountsByBook(
 ): Promise<Record<number, number>> {
   const res = await apiFetch("/notes/counts-by-book", token);
   if (!res.ok) throw new Error("failed to load note counts");
+  return res.json();
+}
+
+export async function fetchNoteMedia(
+  noteId: number,
+  token: string | null,
+): Promise<NoteMedia | null> {
+  const res = await apiFetch(`/notes/${noteId}/media`, token);
+  if (res.status === 204) return null; // pdf, text, etc.
+  if (!res.ok) throw new Error("failed to load media");
   return res.json();
 }
