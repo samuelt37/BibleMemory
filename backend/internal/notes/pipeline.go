@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"strings"
 
 	"github.com/samuelt37/BibleMemory/internal/gemini"
@@ -37,18 +38,52 @@ func extractTextFromFile(ctx context.Context, client *gemini.Client, fileBytes [
 	return client.GenerateContent(ctx, body)
 }
 
+const videoWindowSec = 600 // 10 minutes
+
+const videoPrompt = `Transcribe every word spoken in this video's audio track, verbatim. Do not summarize, condense, or skip any speech. Whenever a slide or on-screen text appears or changes, add its text on its own line in the form [Slide: ...] at that point in the transcript. Speech is the priority: never replace spoken words with slide text, and do not describe images. Return ONLY the transcript, with no other commentary or headers.`
+
 func extractTextFromVideo(ctx context.Context, client *gemini.Client, f *gemini.File) (string, error) {
+	dur := f.DurationSeconds()
+	if dur <= 0 {
+		log.Println("extractTextFromVideo: no duration reported, transcribing in one pass")
+		return transcribeWindow(ctx, client, f, 0, 0)
+	}
+
+	var sb strings.Builder
+	for start := 0; float64(start) < dur; start += videoWindowSec {
+		end := start + videoWindowSec
+		if float64(end) > dur {
+			end = int(math.Ceil(dur))
+		}
+		log.Printf("extractTextFromVideo: window %ds-%ds of %.0fs", start, end, dur)
+
+		part, err := transcribeWindow(ctx, client, f, start, end)
+		if err != nil {
+			return "", fmt.Errorf("window %d-%d: %w", start, end, err)
+		}
+		sb.WriteString(strings.TrimSpace(part))
+		sb.WriteString("\n\n")
+	}
+	return sb.String(), nil
+}
+
+func transcribeWindow(ctx context.Context, client *gemini.Client, f *gemini.File, start, end int) (string, error) {
+	filePart := map[string]any{
+		"file_data": map[string]string{"mime_type": f.MimeType, "file_uri": f.URI},
+	}
+	prompt := videoPrompt
+
+	if end > 0 {
+		filePart["video_metadata"] = map[string]string{
+			"start_offset": fmt.Sprintf("%ds", start),
+			"end_offset":   fmt.Sprintf("%ds", end),
+		}
+		prompt = fmt.Sprintf("This clip covers %d:%02d to %d:%02d of the video. ", start/60, start%60, end/60, end%60) + prompt
+	}
+
 	body := map[string]any{
 		"contents": []map[string]any{
-			{
-				"parts": []map[string]any{
-					{"file_data": map[string]string{
-						"mime_type": f.MimeType,
-						"file_uri":  f.URI,
-					}},
-					{"text": "Transcribe every word spoken in this video's audio track, verbatim. Ignore slides and on-screen text entirely. Do not summarize, condense, or skip anything. Return ONLY the spoken words, with no commentary, headers, or timestamps."},
-				},
-			},
+			{"parts": []map[string]any{filePart, {"text": prompt}}},
 		},
 	}
 	return client.GenerateContentLong(ctx, body)

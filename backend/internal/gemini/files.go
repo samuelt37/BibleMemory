@@ -93,7 +93,7 @@ func (c *Client) UploadFile(ctx context.Context, r io.Reader, size int64, mimeTy
 	if f.State != "ACTIVE" {
 		return nil, fmt.Errorf("files api: file ended in state %s", f.State)
 	}
-	return f, nil
+	return c.getFile(ctx, apiKey, f.Name)
 }
 
 func (c *Client) getFile(ctx context.Context, apiKey, name string) (*File, error) {
