@@ -13,7 +13,6 @@ type Segment struct {
 	Seconds int `json:"s"`
 }
 
-var tsRe = regexp.MustCompile(`^\s*\[(?:(\d+):)?(\d{1,2}):(\d{2})\]\s*`)
 var anyTsRe = regexp.MustCompile(`\[(?:(\d+):)?(\d{1,2}):(\d{2})\]\s*`)
 
 func tsSeconds(m []string) int {

@@ -109,6 +109,7 @@ func (c *Client) generateContent(ctx context.Context, body map[string]any, timeo
 				bodyBytes, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
 				lastErr = fmt.Errorf("gemini API returned status %d for model %s: %s", resp.StatusCode, modelName, string(bodyBytes))
+				log.Printf("gemini: status %d on %s: %.1500s", resp.StatusCode, modelName, bodyBytes)
 				break
 			}
 

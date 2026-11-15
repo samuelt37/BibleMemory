@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/samuelt37/BibleMemory/internal/gemini"
+	"golang.org/x/sync/errgroup"
 )
 
 const transcribePrompt = `Transcribe all text in this file exactly as written, including handwriting.
@@ -40,7 +44,25 @@ func extractTextFromFile(ctx context.Context, client *gemini.Client, fileBytes [
 
 const videoWindowSec = 600 // 10 minutes
 
-const videoPrompt = `Transcribe every word spoken in this video's audio track, verbatim. Do not summarize, condense, or skip any speech. Start a new paragraph about every 30-60 seconds, and begin each paragraph with the time it starts as [MM:SS], measured from the start of the clip you are given (use [H:MM:SS] past one hour). Put a timestamp only at the start of a paragraph, never mid-sentence and never on every line. When a slide or on-screen text changes to something new, add its text on its own line in the form [Slide: ...] at that point in the transcript. Do not repeat a slide that is still on screen, and ignore countdown timers, clocks, progress bars, and placeholder screens such as "please prepare your hearts for worship". Speech is the priority: never replace spoken words with slide text, and do not describe images. If nobody is speaking during a stretch, return nothing for it. Return ONLY the transcript, with no other commentary or headers.`
+const videoPrompt = `Transcribe every word spoken in this video's audio track, verbatim. Do not summarize, condense, or skip any speech.
+
+TIMESTAMPS
+- Start a new paragraph about every 30-60 seconds, and begin each paragraph with the time it starts as [MM:SS]. Use [H:MM:SS] once past one hour.
+- Timestamps are relative to the start of THIS clip. The clip begins at [0:00], no matter where it sits in the original video. Never use the original video's time.
+- Put a timestamp only at the start of a paragraph, never mid-sentence and never on every line.
+
+SLIDES
+- When a slide or on-screen text changes to something new, add its text on its own line in the form [Slide: ...] at that point in the transcript.
+- Do not repeat a slide that is still on screen.
+- Ignore countdown timers, clocks, progress bars, and placeholder screens such as "please prepare your hearts for worship".
+
+PRIORITIES
+- Speech comes first: never replace spoken words with slide text, and do not describe images.
+- If nobody is speaking during a stretch, return nothing for it.
+
+Return ONLY the transcript, with no other commentary or headers.`
+
+const videoParallelism = 3
 
 func extractTextFromVideo(ctx context.Context, client *gemini.Client, f *gemini.File) (string, error) {
 	dur := f.DurationSeconds()
@@ -49,22 +71,70 @@ func extractTextFromVideo(ctx context.Context, client *gemini.Client, f *gemini.
 		return transcribeWindow(ctx, client, f, 0, 0)
 	}
 
-	var sb strings.Builder
+	type win struct{ start, end int }
+	var wins []win
 	for start := 0; float64(start) < dur; start += videoWindowSec {
 		end := start + videoWindowSec
 		if float64(end) > dur {
 			end = int(math.Ceil(dur))
 		}
-		part, err := transcribeWindow(ctx, client, f, start, end)
-		if err != nil {
-			return "", fmt.Errorf("window %d-%d: %w", start, end, err)
+		wins = append(wins, win{start, end})
+	}
+
+	parts := make([]string, len(wins))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(videoParallelism)
+	for i, w := range wins {
+		i, w := i, w
+		g.Go(func() error {
+			part, err := withRetry(gctx, 4, func() (string, error) {
+				return transcribeWindow(gctx, client, f, w.start, w.end)
+			})
+			if err != nil {
+				return fmt.Errorf("window %d-%d: %w", w.start, w.end, err)
+			}
+			parts[i] = strings.TrimSpace(part)
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return "", err
+	}
+
+	var sb strings.Builder
+	for i, w := range wins {
+		part := parts[i]
+		offset := w.start
+		// Model sometimes returns absolute time instead of clip-relative.
+		if m := anyTsRe.FindStringSubmatchIndex(part); m != nil && w.start > 0 {
+			if float64(idxSeconds(part, m)) >= float64(w.start)-5 {
+				offset = 0
+			}
 		}
-		log.Printf("extractTextFromVideo: window %ds first line: %.60s", start, strings.TrimSpace(part))
-		part = offsetTimestamps(part, start)
-		sb.WriteString(strings.TrimSpace(part))
+		log.Printf("extractTextFromVideo: window %ds offset=%d first line: %.60s", w.start, offset, part)
+		sb.WriteString(strings.TrimSpace(offsetTimestamps(part, offset)))
 		sb.WriteString("\n\n")
 	}
 	return sb.String(), nil
+}
+
+func withRetry(ctx context.Context, attempts int, fn func() (string, error)) (string, error) {
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		out, err := fn()
+		if err == nil {
+			return out, nil
+		}
+		lastErr = err
+		backoff := time.Duration(1<<i) * time.Second
+		backoff += time.Duration(rand.Intn(1000)) * time.Millisecond // jitter
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(backoff):
+		}
+	}
+	return "", lastErr
 }
 
 func transcribeWindow(ctx context.Context, client *gemini.Client, f *gemini.File, start, end int) (string, error) {
@@ -178,16 +248,83 @@ func matchChunkToVerse(ctx context.Context, client *gemini.Client, chunk string,
 		return nil, fmt.Errorf("failed to parse match response: empty response (chunk len %d)", len(chunk))
 	}
 
+	retryTemp := 0.7
+	attempts := []*float64{nil, &retryTemp} // first: default, second: slightly hotter
+
 	var match chunkMatch
-	if err := json.Unmarshal([]byte(raw), &match); err != nil {
-		log.Printf("matchChunkToVerse: bad JSON (chunk len %d): %.300s", len(chunk), raw)
-		return nil, fmt.Errorf("failed to parse match response: %w", err)
+	var parseErr error
+	for _, temp := range attempts {
+		actx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		rawText, err := client.GenerateContent(actx, buildMatchBody(prompt, temp))
+		cancel()
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+				parseErr = err // runaway generation: give the second attempt its own 30s
+				continue
+			}
+			return nil, err
+		}
+		raw := cleanJSONFence(rawText)
+		if strings.TrimSpace(raw) == "" {
+			parseErr = fmt.Errorf("empty response (chunk len %d)", len(chunk))
+			continue
+		}
+		match = chunkMatch{}
+		if parseErr = json.Unmarshal([]byte(raw), &match); parseErr == nil {
+			break
+		}
+		logBadJSON(raw, parseErr, len(chunk))
+	}
+	if parseErr != nil {
+		return nil, fmt.Errorf("failed to parse match response: %w", parseErr)
 	}
 	match.Refs = dedupeOverlaps(match.Refs)
 	for i := range match.Refs {
 		match.Refs[i].Quotes = validQuotes(chunk, match.Refs[i].Quotes)
 	}
 	return &match, nil
+}
+
+var matchSchema = func() map[string]any {
+	nullInt := map[string]any{"type": "INTEGER", "nullable": true}
+	return map[string]any{
+		"type": "OBJECT",
+		"properties": map[string]any{
+			"refs": map[string]any{
+				"type": "ARRAY",
+				"items": map[string]any{
+					"type": "OBJECT",
+					"properties": map[string]any{
+						"bookId":     map[string]any{"type": "INTEGER"},
+						"chapter":    nullInt,
+						"verseStart": nullInt,
+						"verseEnd":   nullInt,
+						"quotes": map[string]any{
+							"type":  "ARRAY",
+							"items": map[string]any{"type": "STRING"},
+						},
+					},
+					"required": []string{"bookId", "quotes"},
+				},
+			},
+		},
+		"required": []string{"refs"},
+	}
+}()
+
+func buildMatchBody(prompt string, temp *float64) map[string]any {
+	cfg := map[string]any{
+		"responseMimeType": "application/json",
+		"responseSchema":   matchSchema,
+		"maxOutputTokens":  1500, // was 4096; a valid response is a few hundred tokens
+	}
+	if temp != nil {
+		cfg["temperature"] = *temp // only set on the retry; nil = model default
+	}
+	return map[string]any{
+		"contents":         []map[string]any{{"parts": []map[string]string{{"text": prompt}}}},
+		"generationConfig": cfg,
+	}
 }
 
 func dedupeOverlaps(refs []verseRef) []verseRef {
@@ -297,4 +434,15 @@ func trimSpaceBoth(s string) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+func logBadJSON(raw string, err error, chunkLen int) {
+	var se *json.SyntaxError
+	if errors.As(err, &se) {
+		off := int(se.Offset)
+		lo, hi := max(0, off-80), min(len(raw), off+80)
+		log.Printf("matchChunkToVerse: bad JSON at byte %d (chunk len %d): ...%s...", off, chunkLen, raw[lo:hi])
+		return
+	}
+	log.Printf("matchChunkToVerse: bad JSON (chunk len %d): %.300s", chunkLen, raw)
 }

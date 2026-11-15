@@ -110,6 +110,12 @@ func (s *Service) processVideo(userID, noteID int, key string, size int64, mimeT
 	extractCtx, cancelExtract := context.WithTimeout(context.Background(), 40*time.Minute)
 	defer cancelExtract()
 
+	t := time.Now()
+	stage := func(name string) {
+		log.Printf("processVideo note=%d stage=%s elapsed=%s", noteID, name, time.Since(t))
+		t = time.Now()
+	}
+
 	obj, err := s.r2.Download(extractCtx, key)
 	if err != nil {
 		log.Println("processVideo: r2 download failed for note", noteID, ":", err)
@@ -118,6 +124,7 @@ func (s *Service) processVideo(userID, noteID int, key string, size int64, mimeT
 	}
 	defer obj.Close()
 
+	s.repo.UpdateStatus(noteID, "uploading")
 	f, err := s.gemini.UploadFile(extractCtx, obj, size, mimeType, key)
 	if err != nil {
 		log.Println("processVideo: gemini upload failed for note", noteID, ":", err)
@@ -125,7 +132,9 @@ func (s *Service) processVideo(userID, noteID int, key string, size int64, mimeT
 		return
 	}
 	defer s.gemini.DeleteFile(context.Background(), f.Name)
+	stage("gemini_upload")
 
+	s.repo.UpdateStatus(noteID, "transcribing")
 	text, err := extractTextFromVideo(extractCtx, s.gemini, f)
 	if err != nil {
 		log.Println("processVideo: extraction failed for note", noteID, ":", err)
@@ -143,14 +152,18 @@ func (s *Service) processVideo(userID, noteID int, key string, size int64, mimeT
 	if err := s.repo.SaveSegments(noteID, segs); err != nil {
 		log.Println("processVideo: failed to save segments for note", noteID, ":", err)
 	}
+	stage("transcribe")
 
 	// Fresh budget for chunk -> tag -> embed, so a slow upload can't starve it
 	processCtx, cancelProcess := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancelProcess()
 
+	s.repo.UpdateStatus(noteID, "analyzing")
 	if err := s.ProcessNote(processCtx, userID, noteID); err != nil {
 		log.Println("processVideo: ProcessNote failed for note", noteID, ":", err)
+		s.repo.UpdateStatus(noteID, "failed")
 	}
+	stage("process_note")
 }
 
 func (s *Service) extractAndProcess(ctx context.Context, userID, noteID int, fileBytes []byte, mimeType string) {
@@ -314,17 +327,21 @@ func (s *Service) ProcessNote(ctx context.Context, userID, noteID int) error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
+			t0 := time.Now()
 			match, err := s.matchChunk(ctx, c, bookList)
+			log.Printf("ProcessNote: chunk %d tag=%s", idx, time.Since(t0))
 			if err != nil {
-				// rate limits and cancellations still fail the note; a bad response doesn't
-				if errors.Is(err, ErrRateLimited) || ctx.Err() != nil {
+				if ctx.Err() != nil { // only the whole-note context failing should fail the note
 					results[idx] = chunkResult{content: c, err: err}
 					return
 				}
 				log.Printf("ProcessNote: chunk %d tagging failed, saving untagged: %v", idx, err)
-				match = &chunkMatch{} // no refs; Retag can fill it in later
+				match = &chunkMatch{} // Retag can fill it in later
 			}
+
+			t1 := time.Now()
 			embedding, err := s.gemini.EmbedText(ctx, c, 768)
+			log.Printf("ProcessNote: chunk %d embed=%s", idx, time.Since(t1))
 			if err != nil {
 				results[idx] = chunkResult{content: c, err: err}
 				return
@@ -415,7 +432,7 @@ func (s *Service) ReRefNotes(ctx context.Context, userID, noteID int) error {
 var ErrRateLimited = errors.New("gemini rate limited")
 
 func (s *Service) matchChunk(ctx context.Context, content, bookList string) (*chunkMatch, error) {
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := 0; ; attempt++ {
 		if err := s.matchLimiter.Wait(ctx); err != nil {
 			return nil, err
 		}
@@ -423,23 +440,18 @@ func (s *Service) matchChunk(ctx context.Context, content, bookList string) (*ch
 		if err == nil {
 			return match, nil
 		}
-
 		if !isRateLimited(err) {
-			if attempt == 0 && ctx.Err() == nil {
-				continue // any other failure: try once more
-			}
-			return nil, err
+			return nil, err // no more "try again" for other errors
 		}
-		if attempt == 0 {
-			// Google said to retry in ~50s; wait it out once
-			select {
-			case <-time.After(55 * time.Second):
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			}
+		if attempt == 1 {
+			return nil, ErrRateLimited
+		}
+		select {
+		case <-time.After(55 * time.Second):
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 	}
-	return nil, ErrRateLimited
 }
 
 func isRateLimited(err error) bool {

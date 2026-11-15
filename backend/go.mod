@@ -8,6 +8,7 @@ require github.com/lib/pq v1.12.3
 
 require (
 	github.com/pgvector/pgvector-go v0.4.1 // indirect
+	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 )
 
